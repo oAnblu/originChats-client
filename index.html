@@ -87,8 +87,27 @@
             servers: [],
             currentUser: null,
             pings: {},
-            memberListDrawn: false
+            memberListDrawn: false,
+            unreadPings: {}
         };
+
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        function playPingSound() {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+        }
 
         window.onload = function () {
             requestNotificationPermission();
@@ -183,8 +202,6 @@
             if ('Notification' in window && Notification.permission === 'granted') {
                 const notification = new Notification(title, {
                     body: body,
-                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%239b87f5" width="100" height="100"/><circle cx="50" cy="50" r="30" fill="%230a0912"/></svg>',
-                    badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%239b87f5" width="100" height="100"/></svg>',
                     tag: channel
                 });
 
@@ -403,6 +420,30 @@
                         state.messages[msg.channel] = [];
                     }
                     state.messages[msg.channel].push(msg.message);
+
+                    if (state.currentUser && msg.message.user !== state.currentUser.username) {
+                        const content = msg.message.content.toLowerCase();
+                        const username = state.currentUser.username.toLowerCase();
+
+                        if (content.includes('@' + username) || content.includes('@everyone')) {
+                            if (msg.channel !== state.currentChannel?.name) {
+                                if (!state.unreadPings[msg.channel]) {
+                                    state.unreadPings[msg.channel] = 0;
+                                }
+                                state.unreadPings[msg.channel]++;
+                                renderChannels();
+                            }
+
+                            playPingSound();
+
+                            const notifTitle = `${msg.message.user} mentioned you in #${msg.channel}`;
+                            const notifBody = msg.message.content.length > 100
+                                ? msg.message.content.substring(0, 100) + '...'
+                                : msg.message.content;
+                            showNotification(notifTitle, notifBody, msg.channel);
+                        }
+                    }
+
                     if (msg.channel === state.currentChannel?.name) {
                         renderMessages();
                     }
@@ -438,6 +479,12 @@
                     const name = document.createElement('span');
                     name.textContent = channel.name;
                     div.appendChild(name);
+                    if (state.unreadPings[channel.name] > 0) {
+                        const badge = document.createElement('span');
+                        badge.className = 'ping-badge';
+                        badge.textContent = state.unreadPings[channel.name];
+                        div.appendChild(badge);
+                    }
                     div.onclick = () => {
                         selectChannel(channel);
                         closeMenu();
@@ -458,6 +505,10 @@
 
             state.currentChannel = channel;
             document.getElementById('channel-name').textContent = `#${channel.name}`;
+            if (state.unreadPings[channel.name]) {
+                delete state.unreadPings[channel.name];
+                renderChannels();
+            }
 
             document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
             const channelItems = Array.from(document.querySelectorAll('.channel-item'));
@@ -477,17 +528,17 @@
         function formatTimestamp(unix) {
             const d = new Date(unix * 1000);
             const day = d.getDate();
-            const suffix = 
+            const suffix =
                 day % 10 === 1 && day !== 11 ? 'st' :
-                day % 10 === 2 && day !== 12 ? 'nd' :
-                day % 10 === 3 && day !== 13 ? 'rd' : 'th';
+                    day % 10 === 2 && day !== 12 ? 'nd' :
+                        day % 10 === 3 && day !== 13 ? 'rd' : 'th';
 
             const month = d.toLocaleString('en-GB', { month: 'long' });
             const year = d.getFullYear();
             const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             return `${day}${suffix} ${month} ${year}, ${time}`;
-            }
+        }
 
 
         function renderMessages() {
@@ -561,6 +612,16 @@
                 // Create message element
                 const messageText = document.createElement('div');
                 messageText.className = 'message-text';
+
+                if (state.currentUser) {
+                    const content = msg.content;
+                    const username = state.currentUser.username;
+                    
+                    if (content.includes('@' + username) || content.includes('@everyone')) {
+                        messageText.classList.add('mentioned');
+                    }
+                }
+
                 messageText.textContent = msg.content;
 
                 messageText.addEventListener('contextmenu', (e) => {
