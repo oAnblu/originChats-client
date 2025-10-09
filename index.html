@@ -312,7 +312,7 @@
             .channels {
                 position: fixed;
                 left: 0;
-                top: 65px;
+                top: 0;
                 bottom: 0;
                 z-index: 100;
                 transform: translateX(-100%);
@@ -400,9 +400,10 @@
         }
 
         .channel-separator {
-            height: 20px;
+            height: 10px;
             border-top: 1px solid var(--border);
-            margin: 10px 0;
+            margin-top: 10px;
+            margin-bottom: 0;
         }
 
         .menu-btn {
@@ -773,6 +774,129 @@
         .member.idle::after {
             background: #faa61a;
         }
+
+        .channels {
+            width: 250px;
+            background: var(--surface);
+            overflow-y: auto;
+            padding: 10px 10px 0 10px;
+            transition: transform 0.3s ease;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .channels-list {
+            flex: 1;
+            overflow-y: auto;
+            padding-bottom: 10px;
+        }
+
+        .user-section {
+            background: var(--surface-light);
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 8px;
+            margin-top: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s ease;
+            position: relative;
+        }
+
+        .user-section:hover {
+            background: var(--surface-hover);
+        }
+
+        .user-section .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .user-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .user-info .username {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .user-info .status {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .user-menu {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            right: 0;
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            display: none;
+            animation: slideUp 0.2s ease;
+            z-index: 1000;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .user-menu.active {
+            display: block;
+        }
+
+        .user-menu-item {
+            padding: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background 0.2s ease;
+            font-size: 14px;
+        }
+
+        .user-menu-item:first-child {
+            border-radius: 8px 8px 0 0;
+        }
+
+        .user-menu-item:last-child {
+            border-radius: 0 0 8px 8px;
+        }
+
+        .user-menu-item:hover {
+            background: var(--surface-hover);
+        }
+
+        .user-menu-item.danger {
+            color: var(--ping);
+        }
+
+        .user-menu-item.danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
     </style>
 </head>
 
@@ -803,7 +927,22 @@
         </div>
         <div class="overlay" onclick="closeMenu()"></div>
         <div class="content">
-            <div id="channels" class="channels"></div>
+            <div id="channels" class="channels">
+                <div class="channels-list" id="channels-list"></div>
+                <div class="user-section" onclick="toggleUserMenu()">
+                    <img id="user-avatar" class="avatar" src="" alt="User">
+                    <div class="user-info">
+                        <div id="user-username" class="username">Loading...</div>
+                        <div class="status">Online</div>
+                    </div>
+                    <div id="user-menu" class="user-menu">
+                        <div class="user-menu-item danger" onclick="event.stopPropagation(); logout()">
+                            <span>🚪</span>
+                            <span>Logout</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="messages-container">
                 <div id="messages" class="messages"></div>
                 <div class="input-area">
@@ -914,6 +1053,10 @@
             document.addEventListener('click', function (e) {
                 if (!e.target.closest('.server-info')) {
                     closeServerDropdown();
+                }
+                if (!e.target.closest('.user-section')) {
+                    const menu = document.getElementById('user-menu');
+                    if (menu) menu.classList.remove('active');
                 }
             });
         };
@@ -1095,6 +1238,7 @@
                     break;
                 case 'ready':
                     state.currentUser = msg.user;
+                    updateUserSection();
                     break
 
                 case 'auth_success':
@@ -1166,10 +1310,12 @@
         }
 
         function renderChannels() {
-            const container = document.getElementById('channels');
+            const container = document.getElementById('channels-list');
             container.innerHTML = '';
 
-            state.channels.forEach((channel, index) => {
+            for (let i = 0; i < state.channels.length; i++) {
+                const channel = state.channels[i];
+                if (!checkPermission(channel.permissions?.view, state.currentUser.roles)) continue;
                 if (channel.type === 'text') {
                     const div = document.createElement('div');
                     div.className = 'channel-item';
@@ -1184,7 +1330,7 @@
                         selectChannel(channel);
                         closeMenu();
                     };
-                    if (index === 0) div.classList.add('active');
+                    if (i === 0) div.classList.add('active');
                     container.appendChild(div);
                 } else if (channel.type === 'separator') {
                     const div = document.createElement('div');
@@ -1192,7 +1338,7 @@
                     div.style.height = (channel.size || 20) + 'px';
                     container.appendChild(div);
                 }
-            });
+            };
         }
 
         function selectChannel(channel) {
@@ -1217,108 +1363,107 @@
         }
 
         function renderMessages() {
-    const container = document.getElementById('messages');
-    const messages = (state.messages[state.currentChannel.name] || []).slice().reverse(); // newest last
-    container.innerHTML = '';
+            const container = document.getElementById('messages');
+            const messages = (state.messages[state.currentChannel.name] || []).slice().reverse();
+            container.innerHTML = '';
 
-    const frag = document.createDocumentFragment();
-    let lastUser = null;
-    let lastTime = 0;
-    let groupDiv = null;
-    let groupMessages = [];
+            const frag = document.createDocumentFragment();
+            let lastUser = null;
+            let lastTime = 0;
+            let groupDiv = null;
+            let groupMessages = [];
 
-    const flushGroup = () => {
-        if (!groupDiv || groupMessages.length === 0) return;
-        const groupContent = groupDiv.querySelector('.message-group-content');
-        // Reverse the messages so newest is at bottom within group
-        for (let j = groupMessages.length - 1; j >= 0; j--) {
-            groupContent.appendChild(groupMessages[j]);
-        }
-        groupMessages = [];
-    };
+            const flushGroup = () => {
+                if (!groupDiv || groupMessages.length === 0) return;
+                const groupContent = groupDiv.querySelector('.message-group-content');
+                // Reverse the messages so newest is at bottom within group
+                for (let j = groupMessages.length - 1; j >= 0; j--) {
+                    groupContent.appendChild(groupMessages[j]);
+                }
+                groupMessages = [];
+            };
 
-    for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        const user = state.users[msg.user] || { username: msg.user };
-        const avatarUrl = `https://avatars.rotur.dev/${msg.user}?radius=128`;
-        const timestamp = new Date(msg.timestamp * 1000).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+            for (let i = 0; i < messages.length; i++) {
+                const msg = messages[i];
+                const user = state.users[msg.user] || { username: msg.user };
+                const avatarUrl = `https://avatars.rotur.dev/${msg.user}?radius=128`;
+                const timestamp = new Date(msg.timestamp * 1000).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
 
-        const sameUser = msg.user === lastUser && (msg.timestamp - lastTime) < 300;
-        lastUser = msg.user;
-        lastTime = msg.timestamp;
+                const sameUser = msg.user === lastUser && (msg.timestamp - lastTime) < 300;
+                lastUser = msg.user;
+                lastTime = msg.timestamp;
 
-        if (!sameUser) {
-            // Finish previous group before starting new one
+                if (!sameUser) {
+                    // Finish previous group before starting new one
+                    flushGroup();
+
+                    // New group
+                    groupDiv = document.createElement('div');
+                    groupDiv.className = 'message-group';
+
+                    const avatar = document.createElement('img');
+                    avatar.src = avatarUrl;
+                    avatar.className = 'avatar';
+                    avatar.alt = msg.user;
+                    groupDiv.appendChild(avatar);
+
+                    const groupContent = document.createElement('div');
+                    groupContent.className = 'message-group-content';
+
+                    const header = document.createElement('div');
+                    header.className = 'message-header';
+
+                    const username = document.createElement('span');
+                    username.className = 'username';
+                    username.textContent = msg.user;
+                    username.style.color = user.color || '#fff';
+
+                    const time = document.createElement('span');
+                    time.className = 'timestamp';
+                    time.textContent = timestamp;
+
+                    header.appendChild(username);
+                    header.appendChild(time);
+                    groupContent.appendChild(header);
+
+                    groupDiv.appendChild(groupContent);
+                    frag.appendChild(groupDiv);
+                }
+
+                // Create message element
+                const messageText = document.createElement('div');
+                messageText.className = 'message-text';
+                messageText.textContent = msg.content;
+
+                messageText.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    replyToMessage(msg);
+                });
+
+                // Temporarily store in this group's buffer
+                groupMessages.push(messageText);
+            }
+
+            // Flush last group
             flushGroup();
 
-            // New group
-            groupDiv = document.createElement('div');
-            groupDiv.className = 'message-group';
-
-            const avatar = document.createElement('img');
-            avatar.src = avatarUrl;
-            avatar.className = 'avatar';
-            avatar.alt = msg.user;
-            groupDiv.appendChild(avatar);
-
-            const groupContent = document.createElement('div');
-            groupContent.className = 'message-group-content';
-
-            const header = document.createElement('div');
-            header.className = 'message-header';
-
-            const username = document.createElement('span');
-            username.className = 'username';
-            username.textContent = msg.user;
-            username.style.color = user.color || '#fff';
-
-            const time = document.createElement('span');
-            time.className = 'timestamp';
-            time.textContent = timestamp;
-
-            header.appendChild(username);
-            header.appendChild(time);
-            groupContent.appendChild(header);
-
-            groupDiv.appendChild(groupContent);
-            frag.appendChild(groupDiv);
+            container.appendChild(frag);
+            container.scrollTop = container.scrollHeight; // scroll to bottom
         }
 
-        // Create message element
-        const messageText = document.createElement('div');
-        messageText.className = 'message-text';
-        messageText.textContent = msg.content;
-
-        messageText.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            replyToMessage(msg);
-        });
-
-        // Temporarily store in this group's buffer
-        groupMessages.push(messageText);
-    }
-
-    // Flush last group
-    flushGroup();
-
-    container.appendChild(frag);
-    container.scrollTop = container.scrollHeight; // scroll to bottom
-}
-
+        function checkPermission(roles, permissions) {
+            if (!roles?.length) return true;
+            return roles.some(r => permissions.includes(r));
+        }
 
         function renderMembers(channel) {
             const viewPermissions = channel?.permissions?.view || [];
             const container = document.getElementById('members-list');
 
-            const checkPermission = (roles) => {
-                if (!roles?.length) return true;
-                return roles.some(r => viewPermissions.includes(r));
-            };
-
-            const users = Object.values(state.users).filter(u => checkPermission(u.roles));
+            const users = Object.values(state.users).filter(u => checkPermission(u.roles, viewPermissions));
             const online = users.filter(u => u.status === 'online');
             const offline = users.filter(u => u.status !== 'online');
 
@@ -1419,6 +1564,29 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function updateUserSection() {
+            if (state.currentUser) {
+                document.getElementById('user-username').textContent = state.currentUser.username;
+                document.getElementById('user-avatar').src = `https://avatars.rotur.dev/${state.currentUser.username}?radius=128`;
+            }
+        }
+
+        function toggleUserMenu() {
+            const menu = document.getElementById('user-menu');
+            menu.classList.toggle('active');
+        }
+
+        function logout() {
+            localStorage.removeItem('originchats_token');
+            if (ws) {
+                ws.close();
+            }
+            state.token = null;
+            state.currentUser = null;
+            document.getElementById('chat-screen').classList.remove('active');
+            document.getElementById('auth-screen').classList.add('active');
         }
 
         function showError(message) {
