@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#9b87f5">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>originChats</title>
+    <link rel="manifest"
+        href="data:application/json;base64,eyJuYW1lIjoib3JpZ2luQ2hhdHMiLCJzaG9ydF9uYW1lIjoib3JpZ2luQ2hhdHMiLCJzdGFydF91cmwiOiIvIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzBhMDkxMiIsInRoZW1lX2NvbG9yIjoiIzliODdmNSIsImljb25zIjpbeyJzcmMiOiJkYXRhOmltYWdlL3N2Zyt4bWwsJTNDc3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDEwMCAxMDAnJTNFJTNDcmVjdCBmaWxsPSclMjM5Yjg3ZjUnIHdpZHRoPScxMDAnIGhlaWdodD0nMTAwJy8lM0UlM0NjaXJjbGUgY3g9JzUwJyBjeT0nNTAnIHI9JzMwJyBmaWxsPSclMjMwYTA5MTInLyUzRSUzQy9zdmclM0UiLCJzaXplcyI6IjE5MngxOTIiLCJ0eXBlIjoiaW1hZ2Uvc3ZnK3htbCJ9XX0=">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --primary: #9b87f5;
+            --primary-hover: #b5a3ff;
+            --primary-dark: #7c6bc9;
+            --background: #0f0f0f;
+            --surface: #141414;
+            --surface-light: #222222;
+            --surface-hover: #272727;
+            --text: #e8e6f0;
+            --text-dim: #8b86a3;
+            --accent: #d946ef;
+            --ping: #ef4444;
+            --success: #22c55e;
+            --border: #2a2738;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--background);
+            color: var(--text);
+            overflow: hidden;
+            height: 100vh;
+            touch-action: pan-y;
+        }
+
+        #auth-screen,
+        #chat-screen {
+            display: none;
+            height: 100vh;
+        }
+
+        #auth-screen.active,
+        #chat-screen.active {
+            display: flex;
+        }
+
+        #auth-screen {
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            text-align: center;
+            background: radial-gradient(ellipse at top, rgba(155, 135, 245, 0.15), transparent 50%);
+        }
+
+        .logo {
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 24px;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: bold;
+            box-shadow: 0 8px 32px rgba(155, 135, 245, 0.3);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        p {
+            color: var(--text-dim);
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 16px rgba(155, 135, 245, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(155, 135, 245, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .server-input {
+            width: 100%;
+            max-width: 400px;
+            padding: 15px;
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 16px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s ease;
+        }
+
+        .server-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        #chat-screen {
+            flex-direction: column;
+        }
+
+        .header {
+            background: var(--surface);
+            padding: 7px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+
+        .server-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            transition: background 0.2s ease;
+            position: relative;
+        }
+
+        .server-info:hover {
+            background: var(--surface-hover);
+        }
+
+        .server-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            box-shadow: 0 2px 8px rgba(155, 135, 245, 0.3);
+        }
+
+        .header-text {
+            flex: 1;
+        }
+
+        .server-name {
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .dropdown-arrow {
+            font-size: 12px;
+            color: var(--text-dim);
+            transition: transform 0.3s ease;
+        }
+
+        .dropdown-arrow.open {
+            transform: rotate(180deg);
+        }
+
+        .server-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px;
+            min-width: 250px;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            z-index: 10000;
+            display: none;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .server-dropdown.active {
+            display: block;
+        }
+
+        .server-dropdown-item {
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background 0.2s ease;
+        }
+
+        .server-dropdown-item:hover {
+            background: var(--surface-hover);
+        }
+
+        .server-dropdown-item.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .server-dropdown-item img {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+        }
+
+        .add-server-btn {
+            background: var(--surface-hover);
+            color: var(--primary);
+            font-weight: 600;
+            border-top: 1px solid var(--border);
+            margin-top: 8px;
+            padding-top: 8px;
+        }
+
+        .channel-name {
+            font-size: 14px;
+            color: var(--text-dim);
+        }
+
+        .content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .channels {
+            width: 250px;
+            background: var(--surface);
+            overflow-y: auto;
+            padding: 10px;
+            transition: transform 0.3s ease;
+            border-right: 1px solid var(--border);
+        }
+
+        #members-list {
+            background: #141414;
+            border-left: 1px solid #222;
+            padding: 12px;
+            overflow-y: auto;
+            color: #ccc;
+            font-size: 14px;
+            min-width: 250px;
+        }
+
+        #members-list h2 {
+            font-size: 12px;
+            font-weight: 600;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        @media (max-width: 768px) {
+            .channels {
+                position: fixed;
+                left: 0;
+                top: 65px;
+                bottom: 0;
+                z-index: 100;
+                transform: translateX(-100%);
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+            }
+
+            .channels.open {
+                transform: translateX(0);
+            }
+
+            #members-list {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.7);
+                z-index: 100;
+                transform: translateX(100%);
+                box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+            }
+
+            #members-list.open {
+                transform: translateX(0);
+            }
+
+            .overlay {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.7);
+                z-index: 99;
+                backdrop-filter: blur(4px);
+            }
+
+            .overlay.active {
+                display: block;
+            }
+        }
+
+        .channel-item {
+            padding: 7px 7px;
+            margin-bottom: 2px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            position: relative;
+        }
+
+        .channel-item.active {
+            border-color: var(--surface-light);
+            border-radius: 10px;
+            border-style: solid;
+            color: white;
+        }
+
+        .channel-item.has-ping::after {
+            content: '';
+            position: absolute;
+            right: 10px;
+            width: 8px;
+            height: 8px;
+            background: var(--ping);
+            border-radius: 50%;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.5;
+                transform: scale(1.2);
+            }
+        }
+
+        .channel-separator {
+            height: 20px;
+            border-top: 1px solid var(--border);
+            margin: 10px 0;
+        }
+
+        .menu-btn {
+            display: none;
+            width: 40px;
+            height: 40px;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .menu-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+
+        .messages-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: var(--surface-light);
+            border: 2px solid var(--border);
+        }
+
+        .message-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .username {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .timestamp {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .message-text {
+            font-size: 15px;
+            line-height: 1.4;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .mention {
+            background: rgba(155, 135, 245, 0.2);
+            color: var(--primary);
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .mention.me {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--ping);
+            animation: mentionGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes mentionGlow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 rgba(239, 68, 68, 0);
+            }
+
+            50% {
+                box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+            }
+        }
+
+        .reply-preview {
+            background: var(--surface);
+            border-left: 3px solid var(--primary);
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+
+        .input-area {
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            padding: 10px;
+        }
+
+        .reply-bar {
+            display: none;
+            background: var(--surface-light);
+            padding: 10px 15px;
+            margin-bottom: 5px;
+            border-radius: 8px;
+            font-size: 13px;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 3px solid var(--primary);
+        }
+
+        .reply-bar.active {
+            display: flex;
+        }
+
+        .close-reply {
+            cursor: pointer;
+            padding: 5px;
+            color: var(--text-dim);
+            transition: color 0.2s ease;
+        }
+
+        .close-reply:hover {
+            color: var(--text);
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        #message-input {
+            flex: 1;
+            background: var(--surface-light);
+            border: 2px solid var(--border);
+            padding: 12px 15px;
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 15px;
+            resize: none;
+            max-height: 100px;
+            font-family: inherit;
+        }
+
+        #message-input:focus {
+            outline: none;
+        }
+
+        .send-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(155, 135, 245, 0.3);
+            margin-bottom: 4px;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(155, 135, 245, 0.4);
+        }
+
+        .send-btn:active {
+            transform: scale(0.95);
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid var(--surface-light);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .error {
+            color: var(--ping);
+            padding: 10px;
+            text-align: center;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--surface);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--surface-light);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--surface-hover);
+        }
+
+        .message-group {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .message-group .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+
+        .message-group-content {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-bottom: 2px;
+        }
+
+        .username {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .timestamp {
+            color: #999;
+            font-size: 12px;
+        }
+
+        .message-text {
+            margin-left: 0;
+            padding: 1px 0;
+            font-size: 15px;
+            color: #ddd;
+            word-wrap: break-word;
+        }
+
+        /* Compact grouped messages */
+        .message-group .message-text:not(:first-of-type) {
+            margin-left: 0;
+            padding-top: 2px;
+        }
+
+        #chat-container {
+            display: grid;
+            grid-template-columns: 1fr 240px;
+            /* main chat + sidebar */
+            height: 100%;
+            background: #111;
+        }
+
+        #messages-container {
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .member {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            padding: 4px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s;
+            position: relative;
+        }
+
+        .member:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .member img {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+        }
+
+        .member .name {
+            color: #fff;
+            font-size: 14px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .member::after {
+            content: "";
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--status-color, #555);
+        }
+
+        .member.online::after {
+            background: #43b581;
+        }
+
+        .member.offline::after {
+            background: #555;
+        }
+
+        .member.idle::after {
+            background: #faa61a;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="auth-screen" class="active">
+        <div class="logo">💬</div>
+        <h1>originChats</h1>
+        <p>Connect to your chat server</p>
+        <input type="text" id="server-url" class="server-input" placeholder="chats.mistium.com"
+            value="chats.mistium.com">
+        <button id="auth-button" class="btn">Connect</button>
+    </div>
+
+    <div id="chat-screen">
+        <div class="header">
+            <button class="menu-btn" onclick="toggleMenu()">☰</button>
+            <div class="server-info" onclick="toggleServerDropdown()">
+                <img id="server-icon" class="server-icon" src="" alt="">
+                <div class="header-text">
+                    <div id="server-name" class="server-name">
+                        <span>Loading...</span>
+                        <span class="dropdown-arrow" id="dropdown-arrow">▼</span>
+                    </div>
+                    <div id="channel-name" class="channel-name">#general</div>
+                </div>
+                <div id="server-dropdown" class="server-dropdown"></div>
+            </div>
+        </div>
+        <div class="overlay" onclick="closeMenu()"></div>
+        <div class="content">
+            <div id="channels" class="channels"></div>
+            <div class="messages-container">
+                <div id="messages" class="messages"></div>
+                <div class="input-area">
+                    <div id="reply-bar" class="reply-bar">
+                        <span id="reply-text">Replying to user</span>
+                        <span class="close-reply" onclick="cancelReply()">✕</span>
+                    </div>
+                    <div class="input-wrapper">
+                        <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
+                        <button class="send-btn" onclick="sendMessage()">➤</button>
+                    </div>
+                </div>
+            </div>
+            <div id="members-list"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let state = {
+            token: null,
+            serverUrl: 'chats.mistium.com',
+            validator: null,
+            server: {},
+            channels: [],
+            currentChannel: null,
+            messages: {},
+            users: {},
+            replyTo: null,
+            servers: [],
+            currentUser: null,
+            pings: {},
+            memberListDrawn: false
+        };
+
+        window.onload = function () {
+            requestNotificationPermission();
+
+            // Load saved token
+            const savedToken = localStorage.getItem('originchats_token');
+            const savedServers = JSON.parse(localStorage.getItem('originchats_servers') || '[]');
+            state.servers = savedServers;
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+
+            if (token) {
+                state.token = token;
+                localStorage.setItem('originchats_token', token);
+                const savedUrl = localStorage.getItem('serverUrl') || 'chats.mistium.com';
+                state.serverUrl = savedUrl;
+                document.getElementById('server-url').value = savedUrl;
+                window.history.replaceState({}, document.title, window.location.pathname);
+                connectToServer();
+            } else if (savedToken) {
+                state.token = savedToken;
+                const savedUrl = localStorage.getItem('serverUrl') || 'chats.mistium.com';
+                state.serverUrl = savedUrl;
+                document.getElementById('server-url').value = savedUrl;
+                connectToServer();
+            }
+
+            document.getElementById('auth-button').addEventListener('click', function () {
+                const serverUrl = document.getElementById('server-url').value.trim();
+                if (serverUrl) {
+                    state.serverUrl = serverUrl;
+                    localStorage.setItem('serverUrl', serverUrl);
+                }
+                const returnUrl = encodeURIComponent(window.location.href);
+                window.location.href = `https://rotur.dev/auth?return_to=${returnUrl}`;
+            });
+
+            const input = document.getElementById('message-input');
+            input.addEventListener('input', function () {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+            });
+
+            input.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // Mobile swipe gesture for channel menu
+            let touchStartX = 0;
+            let touchEndX = 0;
+            const messagesContainer = document.querySelector('.messages-container');
+
+            messagesContainer.addEventListener('touchstart', function (e) {
+                touchStartX = e.changedTouches[0].screenX;
+            }, { passive: true });
+
+            messagesContainer.addEventListener('touchend', function (e) {
+                touchEndX = e.changedTouches[0].screenX;
+                handleSwipe();
+            }, { passive: true });
+
+            function handleSwipe() {
+                const swipeDistance = touchEndX - touchStartX;
+                if (swipeDistance > 100) {
+                    toggleMenu();
+                }
+            }
+
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', function (e) {
+                if (!e.target.closest('.server-info')) {
+                    closeServerDropdown();
+                }
+            });
+        };
+
+        function requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }
+
+        function showNotification(title, body, channel) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification(title, {
+                    body: body,
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%239b87f5" width="100" height="100"/><circle cx="50" cy="50" r="30" fill="%230a0912"/></svg>',
+                    badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%239b87f5" width="100" height="100"/></svg>',
+                    tag: channel
+                });
+
+                notification.onclick = function () {
+                    window.focus();
+                    notification.close();
+                };
+            }
+        }
+
+        function toggleMenu() {
+            const channels = document.getElementById('channels');
+            const overlay = document.querySelector('.overlay');
+            channels.classList.toggle('open');
+            overlay.classList.toggle('active');
+        }
+
+        function closeMenu() {
+            const channels = document.getElementById('channels');
+            const overlay = document.querySelector('.overlay');
+            channels.classList.remove('open');
+            overlay.classList.remove('active');
+        }
+
+        function toggleServerDropdown() {
+            const dropdown = document.getElementById('server-dropdown');
+            const arrow = document.getElementById('dropdown-arrow');
+            dropdown.classList.toggle('active');
+            arrow.classList.toggle('open');
+
+            if (dropdown.classList.contains('active')) {
+                renderServerDropdown();
+            }
+        }
+
+        function closeServerDropdown() {
+            const dropdown = document.getElementById('server-dropdown');
+            const arrow = document.getElementById('dropdown-arrow');
+            dropdown.classList.remove('active');
+            arrow.classList.remove('open');
+        }
+
+        function renderServerDropdown() {
+            const dropdown = document.getElementById('server-dropdown');
+            dropdown.innerHTML = '';
+
+            state.servers.forEach(server => {
+                const item = document.createElement('div');
+                item.className = 'server-dropdown-item';
+                if (server.url === state.serverUrl) {
+                    item.classList.add('active');
+                }
+
+                const icon = document.createElement('img');
+                icon.src = server.icon || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%239b87f5" width="100" height="100"/></svg>';
+                icon.alt = server.name;
+
+                const name = document.createElement('span');
+                name.textContent = server.name;
+
+                item.appendChild(icon);
+                item.appendChild(name);
+
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    if (server.url !== state.serverUrl) {
+                        switchServer(server.url);
+                    }
+                    closeServerDropdown();
+                };
+
+                dropdown.appendChild(item);
+            });
+
+            const addBtn = document.createElement('div');
+            addBtn.className = 'server-dropdown-item add-server-btn';
+            addBtn.innerHTML = '<span>+ Add Server</span>';
+            addBtn.onclick = (e) => {
+                e.stopPropagation();
+                addNewServer();
+                closeServerDropdown();
+            };
+            dropdown.appendChild(addBtn);
+        }
+
+        function addNewServer() {
+            const url = prompt('Enter server URL (e.g., chats.mistium.com):');
+            if (url && url.trim()) {
+                switchServer(url.trim());
+            }
+        }
+
+        function switchServer(url) {
+            state.serverUrl = url;
+            localStorage.setItem('serverUrl', url);
+            if (ws) {
+                ws.close();
+            }
+            state.channels = [];
+            state.messages = {};
+            state.currentChannel = null;
+            state.pings = {};
+            connectToServer();
+        }
+
+        function saveServer(server) {
+            const existing = state.servers.find(s => s.url === server.url);
+            if (!existing) {
+                state.servers.push(server);
+            } else {
+                Object.assign(existing, server);
+            }
+            localStorage.setItem('originchats_servers', JSON.stringify(state.servers));
+        }
+
+        function connectToServer() {
+            document.getElementById('auth-screen').classList.remove('active');
+            document.getElementById('chat-screen').classList.add('active');
+
+            ws = new WebSocket(`wss://${state.serverUrl}`);
+
+            ws.onopen = function () {
+                console.log('WebSocket connected');
+            };
+
+            ws.onmessage = function (event) {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+
+            ws.onerror = function (error) {
+                console.error('WebSocket error:', error);
+                showError('Connection error');
+            };
+
+            ws.onclose = function () {
+                console.log('WebSocket closed');
+                setTimeout(connectToServer, 3000);
+            };
+        }
+
+        async function handleMessage(msg) {
+            switch (msg.cmd) {
+                case 'handshake':
+                    state.server = msg.val.server;
+                    state.server.url = state.serverUrl;
+                    saveServer(state.server);
+
+                    document.getElementById('server-name').innerHTML = `
+                        <span>${state.server.name}</span>
+                        <span class="dropdown-arrow" id="dropdown-arrow">▼</span>
+                    `;
+                    if (state.server.icon) {
+                        document.getElementById('server-icon').src = state.server.icon;
+                    }
+
+                    const validatorUrl = `https://social.rotur.dev/generate_validator?key=${msg.val.validator_key}&auth=${state.token}`;
+                    const response = await fetch(validatorUrl);
+                    const data = await response.json();
+                    state.validator = data.validator;
+
+                    wsSend({ cmd: 'auth', validator: state.validator });
+                    break;
+                case 'ready':
+                    state.currentUser = msg.user;
+                    break
+
+                case 'auth_success':
+                    wsSend({ cmd: 'channels_get' });
+                    wsSend({ cmd: 'users_list' });
+                    wsSend({ cmd: 'users_online' });
+                    break;
+
+                case 'channels_get':
+                    state.channels = msg.val;
+                    renderChannels();
+                    if (state.channels.length > 0) {
+                        selectChannel(state.channels[0]);
+                    }
+                    break;
+
+                case 'users_list':
+                    msg.users.forEach(user => {
+                        state.users[user.username] = user;
+                    });
+                    renderMembers(state.currentChannel);
+                    break;
+
+                case 'users_online':
+                    msg.users.forEach(user => {
+                        state.users[user.username].status = 'online';
+                    });
+                    renderMembers(state.currentChannel);
+                    break;
+
+                case "user_connect":
+                    state.users[msg.user].status = 'online';
+                    renderMembers(state.currentChannel);
+                    break;
+
+                case "user_disconnect":
+                    state.users[msg.username].status = 'offline';
+                    renderMembers(state.currentChannel);
+                    break;
+
+                case 'messages_get':
+                    state.messages[msg.channel] = msg.messages;
+                    if (msg.channel === state.currentChannel?.name) {
+                        renderMessages();
+                    }
+                    break;
+
+                case 'message_new':
+                    if (!state.messages[msg.channel]) {
+                        state.messages[msg.channel] = [];
+                    }
+                    state.messages[msg.channel].push(msg.message);
+                    if (msg.channel === state.currentChannel?.name) {
+                        renderMessages();
+                    }
+                    break;
+
+                case 'error':
+                case 'auth_error':
+                    showError(msg.val);
+                    break;
+            }
+        }
+
+        function wsSend(data) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(data));
+            }
+        }
+
+        function renderChannels() {
+            const container = document.getElementById('channels');
+            container.innerHTML = '';
+
+            state.channels.forEach((channel, index) => {
+                if (channel.type === 'text') {
+                    const div = document.createElement('div');
+                    div.className = 'channel-item';
+                    const hash = document.createElement('span');
+                    hash.textContent = '# ';
+                    hash.style.color = 'var(--text-dim)';
+                    div.appendChild(hash);
+                    const name = document.createElement('span');
+                    name.textContent = channel.name;
+                    div.appendChild(name);
+                    div.onclick = () => {
+                        selectChannel(channel);
+                        closeMenu();
+                    };
+                    if (index === 0) div.classList.add('active');
+                    container.appendChild(div);
+                } else if (channel.type === 'separator') {
+                    const div = document.createElement('div');
+                    div.className = 'channel-separator';
+                    div.style.height = (channel.size || 20) + 'px';
+                    container.appendChild(div);
+                }
+            });
+        }
+
+        function selectChannel(channel) {
+            if (!channel) return;
+
+            state.currentChannel = channel;
+            document.getElementById('channel-name').textContent = `#${channel.name}`;
+
+            document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+            const channelItems = Array.from(document.querySelectorAll('.channel-item'));
+            const targetItem = channelItems.find(el => el.textContent.includes(channel.name));
+            if (targetItem) {
+                targetItem.classList.add('active');
+            }
+
+            if (!state.messages[channel.name]) {
+                wsSend({ cmd: 'messages_get', channel: channel.name });
+            } else {
+                renderMessages();
+            }
+            renderMembers(channel);
+        }
+
+        function renderMessages() {
+    const container = document.getElementById('messages');
+    const messages = (state.messages[state.currentChannel.name] || []).slice().reverse(); // newest last
+    container.innerHTML = '';
+
+    const frag = document.createDocumentFragment();
+    let lastUser = null;
+    let lastTime = 0;
+    let groupDiv = null;
+    let groupMessages = [];
+
+    const flushGroup = () => {
+        if (!groupDiv || groupMessages.length === 0) return;
+        const groupContent = groupDiv.querySelector('.message-group-content');
+        // Reverse the messages so newest is at bottom within group
+        for (let j = groupMessages.length - 1; j >= 0; j--) {
+            groupContent.appendChild(groupMessages[j]);
+        }
+        groupMessages = [];
+    };
+
+    for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        const user = state.users[msg.user] || { username: msg.user };
+        const avatarUrl = `https://avatars.rotur.dev/${msg.user}?radius=128`;
+        const timestamp = new Date(msg.timestamp * 1000).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const sameUser = msg.user === lastUser && (msg.timestamp - lastTime) < 300;
+        lastUser = msg.user;
+        lastTime = msg.timestamp;
+
+        if (!sameUser) {
+            // Finish previous group before starting new one
+            flushGroup();
+
+            // New group
+            groupDiv = document.createElement('div');
+            groupDiv.className = 'message-group';
+
+            const avatar = document.createElement('img');
+            avatar.src = avatarUrl;
+            avatar.className = 'avatar';
+            avatar.alt = msg.user;
+            groupDiv.appendChild(avatar);
+
+            const groupContent = document.createElement('div');
+            groupContent.className = 'message-group-content';
+
+            const header = document.createElement('div');
+            header.className = 'message-header';
+
+            const username = document.createElement('span');
+            username.className = 'username';
+            username.textContent = msg.user;
+            username.style.color = user.color || '#fff';
+
+            const time = document.createElement('span');
+            time.className = 'timestamp';
+            time.textContent = timestamp;
+
+            header.appendChild(username);
+            header.appendChild(time);
+            groupContent.appendChild(header);
+
+            groupDiv.appendChild(groupContent);
+            frag.appendChild(groupDiv);
+        }
+
+        // Create message element
+        const messageText = document.createElement('div');
+        messageText.className = 'message-text';
+        messageText.textContent = msg.content;
+
+        messageText.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            replyToMessage(msg);
+        });
+
+        // Temporarily store in this group's buffer
+        groupMessages.push(messageText);
+    }
+
+    // Flush last group
+    flushGroup();
+
+    container.appendChild(frag);
+    container.scrollTop = container.scrollHeight; // scroll to bottom
+}
+
+
+        function renderMembers(channel) {
+            const viewPermissions = channel?.permissions?.view || [];
+            const container = document.getElementById('members-list');
+
+            const checkPermission = (roles) => {
+                if (!roles?.length) return true;
+                return roles.some(r => viewPermissions.includes(r));
+            };
+
+            const users = Object.values(state.users).filter(u => checkPermission(u.roles));
+            const online = users.filter(u => u.status === 'online');
+            const offline = users.filter(u => u.status !== 'online');
+
+            // Reuse DOM sections instead of clearing everything
+            let onlineSec = container.querySelector('.section-online');
+            let offlineSec = container.querySelector('.section-offline');
+
+            if (!onlineSec) {
+                onlineSec = document.createElement('div');
+                onlineSec.className = 'section section-online';
+                const header = document.createElement('h2');
+                header.textContent = 'Online';
+                onlineSec.appendChild(header);
+                container.appendChild(onlineSec);
+            }
+
+            if (!offlineSec) {
+                offlineSec = document.createElement('div');
+                offlineSec.className = 'section section-offline';
+                const header = document.createElement('h2');
+                header.textContent = 'Offline';
+                offlineSec.appendChild(header);
+                container.appendChild(offlineSec);
+            }
+
+            updateSection(onlineSec, online);
+            updateSection(offlineSec, offline);
+
+            function updateSection(section, users) {
+                const membersMap = new Map([...section.querySelectorAll('.member')].map(el => [el.dataset.username, el]));
+
+                users.forEach(u => {
+                    let el = membersMap.get(u.username);
+                    if (!el) {
+                        el = document.createElement('div');
+                        el.className = 'member';
+                        el.dataset.username = u.username;
+
+                        const avatar = document.createElement('img');
+                        avatar.src = `https://avatars.rotur.dev/${u.username}?radius=128`;
+                        el.appendChild(avatar);
+
+                        const name = document.createElement('span');
+                        name.className = 'name';
+                        el.appendChild(name);
+
+                        section.appendChild(el);
+                    }
+
+                    // update existing info
+                    const name = el.querySelector('.name');
+                    name.textContent = u.username;
+                    name.style.color = u.color || '#fff';
+                    el.classList.toggle('offline', u.status !== 'online');
+                    membersMap.delete(u.username);
+                });
+
+                // remove users no longer in list
+                membersMap.forEach(el => el.remove());
+            }
+        }
+
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const content = input.value.trim();
+
+            if (!content || !state.currentChannel) return;
+
+            const msg = {
+                cmd: 'message_new',
+                channel: state.currentChannel.name,
+                content
+            };
+
+            if (state.replyTo) {
+                msg.reply_to = state.replyTo.id;
+                cancelReply();
+            }
+
+            wsSend(msg);
+            input.value = '';
+            input.style.height = 'auto';
+        }
+
+        function replyToMessage(msg) {
+            state.replyTo = msg;
+            document.getElementById('reply-text').textContent = `Replying to ${msg.user}`;
+            document.getElementById('reply-bar').classList.add('active');
+        }
+
+        function cancelReply() {
+            state.replyTo = null;
+            document.getElementById('reply-bar').classList.remove('active');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showError(message) {
+            const container = document.getElementById('messages');
+            container.innerHTML = `<div class="error">${escapeHtml(message)}</div>`;
+        }
+    </script>
+</body>
+
+</html>
