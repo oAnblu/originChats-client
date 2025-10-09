@@ -425,7 +425,7 @@
                         const content = msg.message.content.toLowerCase();
                         const username = state.currentUser.username.toLowerCase();
 
-                        if (content.includes('@' + username) || content.includes('@everyone')) {
+                        if (content.includes('@' + username) || (content.includes('@everyone') && msg.message.user === state.server.owner)) {
                             if (msg.channel !== state.currentChannel?.name) {
                                 if (!state.unreadPings[msg.channel]) {
                                     state.unreadPings[msg.channel] = 0;
