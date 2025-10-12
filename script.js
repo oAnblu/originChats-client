@@ -292,6 +292,7 @@ async function handleMessage(msg) {
             break;
         case 'ready':
             state.currentUser = msg.user;
+            state.users[msg.user.username] = msg.user;
             updateUserSection();
             break
 
@@ -310,29 +311,37 @@ async function handleMessage(msg) {
             break;
 
         case 'users_list':
-            msg.users.forEach(user => {
-                state.users[user.username] = user;
-            });
+            for (let i = 0; i < msg.users.length; i++) {
+                const user = msg.users[i];
+                const existingUser = state.users[user.username];
+                if (existingUser) {
+                    Object.assign(existingUser, user);
+                } else {
+                    state.users[user.username] = user;
+                }
+            }
             renderMembers(state.currentChannel);
             break;
 
         case 'users_online':
-            msg.users.forEach(user => {
-                state.users[user.username].status = 'online';
-            });
+            for (let i = 0; i < msg.users.length; i++) {
+                const user = msg.users[i];
+                const existingUser = state.users[user.username];
+                if (existingUser) {
+                    existingUser.status = 'online';
+                }
+            }
             renderMembers(state.currentChannel);
             break;
 
-        case "user_connect":
-            state.users[msg.user].status = 'online';
-            renderMembers(state.currentChannel);
+        case "user_connect": {
+            wsSend({ cmd: 'users_online' });
             break;
-
-        case "user_disconnect":
-            state.users[msg.username].status = 'offline';
-            renderMembers(state.currentChannel);
+        }
+        case "user_disconnect": {
+            wsSend({ cmd: 'users_online' });
             break;
-
+        }
         case 'messages_get':
             state.messages[msg.channel] = msg.messages;
             if (msg.channel === state.currentChannel?.name) {
