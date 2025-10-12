@@ -351,7 +351,6 @@ async function handleMessage(msg) {
 
         case 'message_new':
             if (!state.messages[msg.channel]) {
-                wsSend({ cmd: 'messages_get', channel: msg.channel });
                 return;
             }
             state.messages[msg.channel].push(msg.message);
