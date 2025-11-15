@@ -13,7 +13,10 @@ let state = {
     currentUser: null,
     pings: {},
     memberListDrawn: false,
-    unreadPings: {}
+    unreadPings: {},
+    _avatarCache: null,
+    _avatarLoading: null,
+    typingUsers: {}
 };
 
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -115,6 +118,8 @@ window.onload = function () {
             if (menu) menu.classList.remove('active');
         }
     });
+
+    setupTypingListener();
 };
 
 function requestNotificationPermission() {
@@ -382,13 +387,101 @@ async function handleMessage(msg) {
                 renderMessages();
             }
             break;
+        
+        case 'message_edit': {
+            if (!state.messages[msg.channel]) {
+                break;
+            }
+            const id = msg.id;
+            const message = state.messages[msg.channel].find(m => m.id === id);
+            message.content = msg.content;
+            if (msg.channel === state.currentChannel?.name) {
+                renderMessages();
+            }
+            break;
+        }
+        case 'message_delete': {
+            if (!state.messages[msg.channel]) {
+                break;
+            }
+            const id = msg.id;
+            const message = state.messages[msg.channel].find(m => m.id === id);
+            state.messages[msg.channel] = state.messages[msg.channel].filter(m => m.id !== id);
+            if (msg.channel === state.currentChannel?.name) {
+                renderMessages();
+            }
+            break;
+        }
+        case 'typing':
+            const channel = msg.channel;
+            const user = msg.user;
+            if (user === state.currentUser?.username) break;
 
+            if (!state.typingUsers[channel]) {
+                state.typingUsers[channel] = new Map();
+            }
+
+            if (channel === state.currentChannel?.name) {
+                const typingMap = state.typingUsers[channel];
+
+                const expireAt = Date.now() + 5000;
+                typingMap.set(user, expireAt);
+
+                updateTypingIndicator();
+
+                setTimeout(() => {
+                    if (typingMap.get(user) <= Date.now()) {
+                        typingMap.delete(user);
+                        updateTypingIndicator();
+                    }
+                }, 5000);
+            }
+
+            break;
         case 'error':
         case 'auth_error':
             showError(msg.val);
             break;
     }
 }
+
+function updateTypingIndicator() {
+    const typingEl = document.getElementById("typing");
+    if (!typingEl) return;
+
+    const channel = state.currentChannel?.name;
+    if (!channel) return;
+
+    const typingMap = state.typingUsers[channel];
+    if (!typingMap) return;
+
+    const now = Date.now();
+    for (const [user, expiry] of typingMap) {
+        if (expiry < now) typingMap.delete(user);
+    }
+
+    const users = [...typingMap.keys()];
+
+    if (users.length === 0) {
+        typingEl.textContent = "";
+        typingEl.style.display = "none";
+        return;
+    }
+
+    typingEl.style.display = "block";
+
+    let text = "";
+    if (users.length === 1) {
+        text = `${users[0]} is typing...`;
+    } else if (users.length === 2) {
+        text = `${users[0]} and ${users[1]} are typing...`;
+    } else {
+        text = `${users.length} people are typing...`;
+    }
+
+    typingEl.textContent = text;
+}
+
 
 function wsSend(data) {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -474,104 +567,221 @@ function formatTimestamp(unix) {
     return `${day}${suffix} ${month} ${year}, ${time}`;
 }
 
+function getAvatar(username) {
+    if (!state._avatarCache) state._avatarCache = {};
+    if (!state._avatarLoading) state._avatarLoading = {};
 
-function renderMessages() {
-    const container = document.getElementById('messages');
-    const messages = (state.messages[state.currentChannel.name] || []).slice().reverse();
-    container.innerHTML = '';
-
-    const frag = document.createDocumentFragment();
-    let lastUser = null;
-    let lastTime = 0;
-    let groupDiv = null;
-    let groupMessages = [];
-
-    const flushGroup = () => {
-        if (!groupDiv || groupMessages.length === 0) return;
-        const groupContent = groupDiv.querySelector('.message-group-content');
-        // Reverse the messages so newest is at bottom within group
-        for (let j = groupMessages.length - 1; j >= 0; j--) {
-            groupContent.appendChild(groupMessages[j]);
-        }
-        groupMessages = [];
-    };
-
-    for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        const user = state.users[msg.user] || { username: msg.user };
-        const avatarUrl = `https://avatars.rotur.dev/${msg.user}?radius=128`;
-        const timestamp = formatTimestamp(msg.timestamp);
-
-        const sameUser = msg.user === lastUser && (msg.timestamp - lastTime) < 300;
-        lastUser = msg.user;
-        lastTime = msg.timestamp;
-
-        if (!sameUser) {
-            // Finish previous group before starting new one
-            flushGroup();
-
-            // New group
-            groupDiv = document.createElement('div');
-            groupDiv.className = 'message-group';
-
-            const avatar = document.createElement('img');
-            avatar.src = avatarUrl;
-            avatar.className = 'avatar';
-            avatar.alt = msg.user;
-            groupDiv.appendChild(avatar);
-
-            const groupContent = document.createElement('div');
-            groupContent.className = 'message-group-content';
-
-            const header = document.createElement('div');
-            header.className = 'message-header';
-
-            const username = document.createElement('span');
-            username.className = 'username';
-            username.textContent = msg.user;
-            username.style.color = user.color || '#fff';
-
-            const time = document.createElement('span');
-            time.className = 'timestamp';
-            time.textContent = timestamp;
-
-            header.appendChild(username);
-            header.appendChild(time);
-            groupContent.appendChild(header);
-
-            groupDiv.appendChild(groupContent);
-            frag.appendChild(groupDiv);
-        }
-
-        // Create message element
-        const messageText = document.createElement('div');
-        messageText.className = 'message-text';
-
-        if (state.currentUser) {
-            const content = msg.content;
-            const username = state.currentUser.username;
-
-            if (content.includes('@' + username) || content.includes('@everyone')) {
-                messageText.classList.add('mentioned');
-            }
-        }
-
-        messageText.textContent = msg.content;
-
-        messageText.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            replyToMessage(msg);
-        });
-
-        // Temporarily store in this group's buffer
-        groupMessages.push(messageText);
+    if (state._avatarCache[username]) {
+        const clone = document.createElement("img");
+        clone.src = state._avatarCache[username];
+        clone.className = "avatar";
+        clone.draggable = false;
+        return clone;
     }
 
-    // Flush last group
-    flushGroup();
+    const img = document.createElement("img");
+    img.className = "avatar";
+    img.draggable = false;
 
-    container.appendChild(frag);
-    container.scrollTop = container.scrollHeight; // scroll to bottom
+    img.src = `https://avatars.rotur.dev/originChats?radius=128`;
+
+    if (state._avatarLoading[username]) {
+        state._avatarLoading[username].then(url => {
+            img.src = url;
+        });
+        return img;
+    }
+
+    state._avatarLoading[username] = fetch(`https://avatars.rotur.dev/${username}?radius=128`)
+        .then(r => r.blob())
+        .then(b => URL.createObjectURL(b))
+        .then(url => {
+            state._avatarCache[username] = url;
+            delete state._avatarLoading[username];
+            return url;
+        })
+        .catch(err => {
+            delete state._avatarLoading[username];
+            throw err;
+        });
+
+    state._avatarLoading[username].then(url => {
+        img.src = url;
+    }).catch(() => {});
+
+    return img;
+}
+
+
+let lastRenderedChannel = null;
+let lastUser = null;
+let lastTime = 0;
+let lastGroup = null;
+
+function renderMessages() {
+    const container = document.getElementById("messages");
+    const channel = state.currentChannel.name;
+    const messages = state.messages[channel] || [];
+
+    container.innerHTML = "";
+    lastUser = null;
+    lastTime = 0;
+    lastGroup = null;
+
+    for (const msg of messages) {
+        const isSameUserRecent =
+            msg.user === lastUser &&
+            msg.timestamp - lastTime < 300000;
+
+        const element = makeMessageElement(msg, isSameUserRecent);
+        container.appendChild(element);
+
+        lastUser = msg.user;
+        lastTime = msg.timestamp;
+    }
+
+    container.scrollTop = container.scrollHeight;
+}
+
+
+function makeMessageElement(msg, isSameUserRecent) {
+    const user = state.users[msg.user] || { username: msg.user };
+    const timestamp = formatTimestamp(msg.timestamp);
+    const isReply = "reply_to" in msg
+    const isHead = !isSameUserRecent || isReply;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = isHead ? 'message-group' : 'message-single';
+    wrapper.dataset.msgId = msg.id;
+
+    if (isHead) {
+        wrapper.appendChild(getAvatar(msg.user));
+    }
+
+    const groupContent = document.createElement('div');
+    groupContent.className = 'message-group-content';
+    wrapper.appendChild(groupContent);
+
+    if (isHead) {
+        const header = document.createElement('div');
+        header.className = 'message-header';
+        const usernameEl = document.createElement('span');
+        usernameEl.className = 'username';
+        usernameEl.textContent = msg.user;
+        usernameEl.style.color = user.color || '#fff';
+
+        const ts = document.createElement('span');
+        ts.className = 'timestamp';
+        ts.textContent = timestamp;
+        header.appendChild(usernameEl);
+        header.appendChild(ts);
+
+        groupContent.appendChild(header);
+    }
+
+    if (isReply) {
+        const replyTo = state.messages[state.currentChannel.name].find(
+            m => m.id === msg.reply_to.id
+        );
+
+        if (replyTo) {
+            const replyUser = state.users[replyTo.user] || { username: replyTo.user };
+
+            const replyDiv = document.createElement('div');
+            replyDiv.className = 'message-reply';
+
+
+            const replyText = document.createElement('div');
+            replyText.className = 'username';
+            replyText.textContent = replyUser.username + ": " + replyTo.content;
+
+            replyDiv.appendChild(getAvatar(replyUser.username));
+            replyDiv.appendChild(replyText);
+            groupContent.appendChild(replyDiv);
+        }
+    }
+
+    const msgText = document.createElement('div');
+    msgText.className = 'message-text';
+    msgText.textContent = msg.content;
+
+    if (state.currentUser) {
+        const username = state.currentUser.username;
+        if (msg.content.includes('@' + username) || msg.content.includes('@everyone')) {
+            msgText.classList.add('mentioned');
+        }
+    }
+
+    msgText.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        openMessageContextMenu(e, msg);
+    });
+
+    groupContent.appendChild(msgText);
+
+    return wrapper;
+}
+
+function editMessage(msg) {
+    console.log("EDIT:", msg);
+}
+
+function deleteMessage(msg) {
+    console.log("DELETE:", msg);
+}
+
+
+let contextMenu = document.getElementById("context-menu");
+let contextMenuOpen = false;
+
+function openMessageContextMenu(event, msg) {
+    closeContextMenu();
+
+    contextMenu.innerHTML = "";
+
+    const addItem = (label, callback) => {
+        const el = document.createElement("div");
+        el.className = "context-menu-item";
+        el.textContent = label;
+        el.onclick = () => {
+            closeContextMenu();
+            callback(msg);
+        };
+        contextMenu.appendChild(el);
+    };
+
+    addItem("Edit message", editMessage);
+    addItem("Reply to message", replyToMessage);
+    addItem("Delete message", deleteMessage);
+
+    // Position the menu
+    const menuWidth = 180;
+    const menuHeight = 120;
+
+    let x = event.clientX;
+    let y = event.clientY;
+
+    // Prevent clipping out of window bounds
+    if (x + menuWidth > window.innerWidth)
+        x = window.innerWidth - menuWidth - 6;
+    if (y + menuHeight > window.innerHeight)
+        y = window.innerHeight - menuHeight - 6;
+
+    contextMenu.style.left = x + "px";
+    contextMenu.style.top = y + "px";
+    contextMenu.style.display = "block";
+
+    contextMenuOpen = true;
+}
+
+// Close menu when clicking anywhere else
+document.addEventListener("click", () => {
+    if (contextMenuOpen) closeContextMenu();
+});
+
+function closeContextMenu() {
+    contextMenu.style.display = "none";
+    contextMenuOpen = false;
 }
 
 function checkPermission(roles, permissions) {
@@ -615,16 +825,14 @@ function renderMembers(channel) {
     function updateSection(section, users) {
         const membersMap = new Map([...section.querySelectorAll('.member')].map(el => [el.dataset.username, el]));
 
-        users.forEach(u => {
+        for (const u of users) {
             let el = membersMap.get(u.username);
             if (!el) {
                 el = document.createElement('div');
                 el.className = 'member';
                 el.dataset.username = u.username;
 
-                const avatar = document.createElement('img');
-                avatar.src = `https://avatars.rotur.dev/${u.username}?radius=128`;
-                el.appendChild(avatar);
+                el.appendChild(getAvatar(u.username));
 
                 const name = document.createElement('span');
                 name.className = 'name';
@@ -639,7 +847,7 @@ function renderMembers(channel) {
             name.style.color = u.color || '#fff';
             el.classList.toggle('offline', u.status !== 'online');
             membersMap.delete(u.username);
-        });
+        }
 
         // remove users no longer in list
         membersMap.forEach(el => el.remove());
@@ -667,6 +875,36 @@ function sendMessage() {
     wsSend(msg);
     input.value = '';
     input.style.height = 'auto';
+}
+
+let typing = false;
+let lastTyped = 0;
+
+function setupTypingListener() {
+    const input = document.getElementById("message-input");
+
+    input.addEventListener("input", () => {
+        lastTyped = Date.now();
+
+        if (!typing) {
+            typing = true;
+            sendTyping();
+            watchForStopTyping();
+        }
+    });
+}
+
+function watchForStopTyping() {
+    const interval = setInterval(() => {
+        if (Date.now() - lastTyped > 1200) { 
+            typing = false;
+            clearInterval(interval);
+        }
+    }, 300);
+}
+
+function sendTyping() {
+    wsSend({ cmd: 'typing', channel: state.currentChannel.name });
 }
 
 function replyToMessage(msg) {
