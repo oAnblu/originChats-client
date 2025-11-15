@@ -14,8 +14,8 @@ let state = {
     pings: {},
     memberListDrawn: false,
     unreadPings: {},
-    _avatarCache: null,
-    _avatarLoading: null,
+    _avatarCache: {},
+    _avatarLoading: {},
     typingUsers: {}
 };
 
@@ -568,50 +568,42 @@ function formatTimestamp(unix) {
 }
 
 function getAvatar(username) {
-    if (!state._avatarCache) state._avatarCache = {};
-    if (!state._avatarLoading) state._avatarLoading = {};
-
-    if (state._avatarCache[username]) {
-        const clone = document.createElement("img");
-        clone.src = state._avatarCache[username];
-        clone.className = "avatar";
-        clone.draggable = false;
-        return clone;
-    }
-
-    const img = document.createElement("img");
+    const img = new Image();
     img.className = "avatar";
     img.draggable = false;
 
-    img.src = `https://avatars.rotur.dev/originChats?radius=128`;
-
-    if (state._avatarLoading[username]) {
-        state._avatarLoading[username].then(url => {
-            img.src = url;
-        });
+    if (state._avatarCache[username]) {
+        img.src = state._avatarCache[username];
         return img;
     }
 
-    state._avatarLoading[username] = fetch(`https://avatars.rotur.dev/${username}?radius=128`)
-        .then(r => r.blob())
-        .then(b => URL.createObjectURL(b))
-        .then(url => {
-            state._avatarCache[username] = url;
-            delete state._avatarLoading[username];
-            return url;
-        })
-        .catch(err => {
-            delete state._avatarLoading[username];
-            throw err;
-        });
+    img.src = `https://avatars.rotur.dev/originChats?radius=128`;
 
-    state._avatarLoading[username].then(url => {
-        img.src = url;
-    }).catch(() => {});
+    if (!state._avatarLoading[username]) {
+        state._avatarLoading[username] = fetchAvatarBase64(username);
+    }
+
+    state._avatarLoading[username].then(dataUri => {
+        state._avatarCache[username] = dataUri;
+        img.src = dataUri;
+    });
 
     return img;
 }
 
+async function fetchAvatarBase64(username) {
+    const response = await fetch(`https://avatars.rotur.dev/${username}?radius=128`);
+    const blob = await response.blob();
+    return await blobToDataURL(blob);
+}
+
+function blobToDataURL(blob) {
+    return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+    });
+}
 
 let lastRenderedChannel = null;
 let lastUser = null;
