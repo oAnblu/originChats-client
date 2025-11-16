@@ -120,7 +120,36 @@ window.onload = function () {
     });
 
     setupTypingListener();
+
+    window.shortcodes = null;
+    window.shortcodeMap = {};
+    // load emoji shortcodes
+    fetch("shortcodes.json")
+        .then(response => response.json())
+        .then(data => {
+            window.shortcodes = data;
+
+            for (const e of data) {
+                const code = e.label.toLowerCase().replace(/\s+/g, "_");
+
+                shortcodeMap[`:${code}:`] = e.emoji;
+
+                if (e.emoticon) {
+                    if (Array.isArray(e.emoticon)) {
+                        e.emoticon.forEach(x => shortcodeMap[x] = e.emoji);
+                    } else {
+                        shortcodeMap[e.emoticon] = e.emoji;
+                    }
+                }
+            }
+        });
 };
+
+function replaceShortcodes(text) {
+  return text.replace(/:[a-z0-9_]+:|[:;xX]['()D]|xD|XD/g, match => {
+    return shortcodeMap[match] || match;
+  });
+}
 
 function requestNotificationPermission() {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -479,11 +508,8 @@ function updateTypingIndicator() {
 
     if (users.length === 0) {
         typingEl.textContent = "";
-        typingEl.style.display = "none";
         return;
     }
-
-    typingEl.style.display = "block";
 
     let text = "";
     if (users.length === 1) {
@@ -565,6 +591,7 @@ function selectChannel(channel) {
         renderMessages();
     }
     renderMembers(channel);
+    updateTypingIndicator();
 }
 
 function formatTimestamp(unix) {
@@ -709,7 +736,11 @@ function makeMessageElement(msg, isSameUserRecent) {
 
     const msgText = document.createElement('div');
     msgText.className = 'message-text';
-    msgText.textContent = msg.content;
+    msgText.innerHTML = parseMsg(msg);
+
+    msgText.querySelectorAll("pre code").forEach(block => {
+        hljs.highlightElement(block);
+    });
 
     if (state.currentUser) {
         const username = state.currentUser.username;
@@ -727,6 +758,78 @@ function makeMessageElement(msg, isSameUserRecent) {
     groupContent.appendChild(msgText);
 
     return wrapper;
+}
+
+function parseMarkdown(text) {
+    const codeBlocks = [];
+
+    text = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+        lang = lang || "plaintext";
+        code = code.replace(/&/g, "&amp;")
+                   .replace(/</g, "&lt;")
+                   .replace(/>/g, "&gt;");
+        
+        const placeholder = `§CODEBLOCK_${codeBlocks.length}§${Math.random().toString(36).substr(2, 9)}§`;
+        codeBlocks.push({
+            placeholder,
+            html: `<pre><code class="language-${lang}">${code}</code></pre>`
+        });
+        return placeholder;
+    });
+
+    text = text.replace(/`([^`]+)`/g, (match, code) => {
+        code = code.replace(/&/g, "&amp;")
+                   .replace(/</g, "&lt;")
+                   .replace(/>/g, "&gt;");
+        return `<code>${code}</code>`;
+    });
+
+    text = text.replace(/^#{6} (.*)$/gm, "<h6>$1</h6>");
+    text = text.replace(/^#{5} (.*)$/gm, "<h5>$1</h5>");
+    text = text.replace(/^#{4} (.*)$/gm, "<h4>$1</h4>");
+    text = text.replace(/^### (.*)$/gm, "<h3>$1</h3>");
+    text = text.replace(/^## (.*)$/gm, "<h2>$1</h2>");
+    text = text.replace(/^# (.*)$/gm, "<h1>$1</h1>");
+
+    text = text.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+    text = text.replace(/___(.+?)___/g, "<strong><em>$1</em></strong>");
+    
+    text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    text = text.replace(/__(.+?)__/g, "<strong>$1</strong>");
+    
+    text = text.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    text = text.replace(/_(.+?)_/g, "<em>$1</em>");
+
+    text = text.replace(/@([a-zA-Z0-9_]+)/g, (match, user) => {
+        return `<span class="mention" data-user="${user}">@${user}</span>`;
+    });
+
+    text = text.replace(/\n(?!<\/?(h[1-6]|pre))/g, "<br>");
+
+    for (const block of codeBlocks) {
+        text = text.replace(block.placeholder, block.html);
+    }
+
+    return text;
+}
+
+function parseMsg(msg) {
+    let text = replaceShortcodes(msg.content);
+
+    text = parseMarkdown(text);
+
+    text = DOMPurify.sanitize(text);
+
+    return text;
+}
+
+function totalEmojis(msg) {
+    let i=0;
+    twemoji.replace(msg.content, function(rawText) {
+        i++;
+        return rawText;
+    });
+    return i
 }
 
 function editMessage(msg) {

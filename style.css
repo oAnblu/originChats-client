@@ -933,6 +933,11 @@ p {
     display: none;
 }
 
+.emoji {
+    width: 24px;
+    height: 24px;
+}
+
 .context-menu-item {
     padding: 8px 12px;
     font-size: 14px;
@@ -946,10 +951,22 @@ p {
 }
 
 .typing {
-    display: none;
+    display: block;
     align-items: center;
     gap: 8px;
     padding: 8px;
     margin-bottom: 8px;
     font-size: 15px;
+}
+
+.mention {
+    color: #9b87f5;
+    background: rgba(155, 135, 245, 0.1);
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.mention:hover {
+    background: rgba(155, 135, 245, 0.2);
 }
