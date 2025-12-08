@@ -1871,3 +1871,16 @@ pre {
     cursor: pointer;
     font-weight: 600;
 }
+
+html, body {
+    overflow-x: hidden;
+    touch-action: pan-y;
+}
+
+.content,
+.messages-container,
+.messages {
+    overflow-x: hidden;
+    touch-action: pan-y;
+    overscroll-behavior-x: none;
+}
