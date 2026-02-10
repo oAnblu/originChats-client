@@ -154,6 +154,8 @@ window.onload = function () {
     } else if (savedToken) {
         state.token = savedToken;
         connectToAllServers();
+    } else {
+        window.location.href = `https://rotur.dev/auth?return_to=${encodeURIComponent(window.location.href)}`;
     }
 
     const input = document.getElementById('message-input');
@@ -2747,6 +2749,7 @@ function sendMessage() {
             content
         }, state.serverUrl);
         editingMessage = null;
+        originalInputValue = '';
         document.getElementById('reply-bar').classList.remove('active');
         input.value = '';
         input.style.height = 'auto';
@@ -3270,6 +3273,7 @@ function logout() {
     });
     state.token = null;
     state.currentUser = null;
+    window.location.reload();
 }
 
 function showError(message) {
