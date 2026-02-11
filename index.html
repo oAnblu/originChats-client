@@ -9,6 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>originChats</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="settings.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 </head>
 
@@ -64,7 +65,7 @@
                         <div class="status">Online</div>
                     </div>
                     <div class="user-section-actions">
-                        <button class="user-section-btn" style="display: none;" onclick="event.stopPropagation(); openSettings()" title="Settings">
+                        <button class="user-section-btn" onclick="event.stopPropagation(); openSettings()" title="Settings">
                             <i data-lucide="settings"></i>
                         </button>
                         <button class="user-section-btn" onclick="event.stopPropagation(); logout()" title="Logout">
@@ -90,14 +91,24 @@
                         </span>
                     </div>
 
+                    <div id="upload-dropzone" class="upload-dropzone">
+                        <i data-lucide="upload-cloud" style="width: 48px; height: 48px;"></i>
+                        <span>Drop images here to upload</span>
+                    </div>
+
                     <div class="input-wrapper">
-                        <button id="gif-btn" class="icon-btn" onclick="toggleGifPicker(event)">
-                            <i data-lucide="image"></i>
-                        </button>
-                        <button id="emoji-btn" class="icon-btn" onclick="toggleEmojiPicker(event)">
-                            <i data-lucide="smile"></i>
+                        <button id="upload-btn" class="icon-btn" onclick="triggerImageUpload()" title="Upload image">
+                            <i data-lucide="upload"></i>
                         </button>
                         <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
+                        <div class="input-toolbar-right">
+                            <button id="gif-btn" class="icon-btn" onclick="toggleGifPicker(event)">
+                                <i data-lucide="image"></i>
+                            </button>
+                            <button id="emoji-btn" class="icon-btn" onclick="toggleEmojiPicker(event)">
+                                <i data-lucide="smile"></i>
+                            </button>
+                        </div>
                         <button class="send-btn" onclick="sendMessage()">
                             <i data-lucide="send"></i>
                         </button>
@@ -110,6 +121,8 @@
                         </div>
                     </div>
                 </div>
+
+                <input type="file" id="image-upload-input" accept="image/*" multiple style="display: none;">
             </div>
             <div id="members-list"></div>
         </div>
@@ -155,6 +168,133 @@
         </div>
     </div>
 
+    <div id="settings-modal" class="settings-panel">
+        <div class="settings-overlay" onclick="closeSettings()"></div>
+        <div class="settings-container">
+            <button class="settings-close" onclick="closeSettings()">
+                <i data-lucide="x"></i>
+            </button>
+            <div class="settings-sidebar">
+                <div class="settings-nav">
+                    <div class="nav-item active" data-section="media-servers">
+                        <div class="nav-item-icon">
+                            <i data-lucide="server"></i>
+                        </div>
+                        <div class="nav-item-label">Media Servers</div>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-content">
+                <div id="section-media-servers" class="settings-section active">
+                    <div class="section-header">
+                        <h2>Media Servers</h2>
+                        <p>Configure where your images and media files are uploaded.</p>
+                    </div>
+                    <div class="card">
+                        <button class="btn btn-primary" onclick="openAddServerModal()">
+                            <i data-lucide="plus"></i>
+                            Add Server
+                        </button>
+                    </div>
+                    <div id="media-servers-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="server-config-modal" class="modal-overlay" onclick="if(event.target === this) closeServerConfigModal()" style="display: none;">
+        <div class="modal-container">
+            <button class="modal-close-btn" onclick="closeServerConfigModal()">
+                <i data-lucide="x"></i>
+            </button>
+            <div class="modal-content">
+                <h2 id="server-modal-title">Add Media Server</h2>
+                <form id="server-config-form" class="server-config-form">
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input type="text" class="setting-input" name="name" placeholder="e.g., Imgur" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Upload URL</label>
+                        <input type="url" class="setting-input" name="uploadUrl" placeholder="https://api.imgur.com/3/image" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Method</label>
+                            <select class="setting-input" name="method">
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                                <option value="PATCH">PATCH</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Enabled</label>
+                            <select class="setting-input" name="enabled">
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">File Parameter Name</label>
+                        <input type="text" class="setting-input" name="fileParamName" placeholder="image (leave empty for default)">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Response URL Path</label>
+                        <input type="text" class="setting-input" name="responseUrlPath" placeholder="$.data.link">
+                        <small class="setting-hint">JSON path to URL or ID in response. Use $. for root.</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">URL Template</label>
+                        <input type="text" class="setting-input" name="urlTemplate" placeholder="https://example.com/{id}">
+                        <small class="setting-hint">Use {id}, {username}, {name}, {timestamp}, or {url} as placeholders.</small>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Requires Authentication</label>
+                        <select class="setting-input" name="requiresAuth">
+                            <option value="false">No</option>
+                            <option value="true">Yes</option>
+                        </select>
+                    </div>
+                    <div id="auth-options" style="display: none;">
+                        <div class="form-group">
+                            <label class="form-label">Auth Type</label>
+                            <select class="setting-input" name="authType">
+                                <option value="session">Session Cookie (roturPhotos)</option>
+                                <option value="token">Bearer Token</option>
+                                <option value="apiKey">API Key in Header</option>
+                            </select>
+                        </div>
+                        <div id="auth-param-group" class="form-group" style="display: none;">
+                            <label class="form-label" id="auth-param-label">API Key</label>
+                            <input type="text" class="setting-input" name="authParam" placeholder="Enter your key...">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Headers</label>
+                        <div id="headers-list"></div>
+                        <button type="button" class="btn btn-secondary" onclick="addHeaderRow()">
+                            <i data-lucide="plus"></i>
+                            Add Header
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Body Parameters</label>
+                        <div id="body-params-list"></div>
+                        <button type="button" class="btn btn-secondary" onclick="addBodyParamRow()">
+                            <i data-lucide="plus"></i>
+                            Add Parameter
+                        </button>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeServerConfigModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.3.0/dist/purify.min.js"></script>
 
@@ -163,6 +303,7 @@
     <script src="embeds.js"></script>
     <script src="markdown.js"></script>
     <script src="interactions.js"></script>
+    <script src="uploads.js"></script>
     <script src="script.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>

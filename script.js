@@ -258,6 +258,7 @@ window.onload = function () {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
             closeSettings();
+            closeServerConfigModal();
             closeAccountModal();
             closeMenu();
             closeServerDropdown();
@@ -363,6 +364,31 @@ function closeMenu() {
 
 let accountCache = {};
 
+function closeSettings() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.classList.remove('active');
+    closeServerConfigModal();
+}
+
+function closeServerConfigModal() {
+    const modal = document.getElementById('server-config-modal');
+    if (modal) modal.classList.remove('active');
+    editingServerId = null;
+}
+
+function openSettings() {
+    closeMenu();
+    closeAccountModal();
+    const modal = document.getElementById('settings-modal');
+    if (!modal) {
+        console.error('Settings modal not found in DOM');
+        return;
+    }
+    modal.classList.add('active');
+    console.log('Settings modal opened');
+    renderMediaServersSettings();
+}
+
 function openAccountModal(username) {
     const modal = document.getElementById('account-modal');
     const content = document.getElementById('account-content');
@@ -386,6 +412,8 @@ function openAccountModal(username) {
 
 function closeAccountModal() {
     document.getElementById('account-modal').classList.remove('active');
+    closeServerConfigModal();
+    closeSettings();
 }
 
 function openCurrentUserProfile() {
@@ -396,6 +424,18 @@ function openCurrentUserProfile() {
 
 
 window.openCurrentUserProfile = openCurrentUserProfile;
+window.openSettings = openSettings;
+window.closeSettings = closeSettings;
+window.renderMediaServersSettings = renderMediaServersSettings;
+window.toggleServerEnabled = toggleServerEnabled;
+window.deleteServer = deleteServer;
+window.openAddServerModal = openAddServerModal;
+window.editServer = editServer;
+window.closeServerConfigModal = closeServerConfigModal;
+window.addHeaderRow = addHeaderRow;
+window.addBodyParamRow = addBodyParamRow;
+window.showError = showError;
+window.hideErrorBanner = hideErrorBanner;
 
 function updateGuildActiveState() {
     const guildItems = document.querySelectorAll('.guild-item');
@@ -3799,16 +3839,395 @@ function addDMServer(username, channel) {
         channel: channel,
         name: username
     });
-    
+
     // Limit to 10 DM servers in sidebar
     if (state.dmServers.length > 10) {
         state.dmServers = state.dmServers.slice(0, 10);
     }
-    
+
     // Save to localStorage
     localStorage.setItem('originchats_dm_servers', JSON.stringify(state.dmServers));
-    
+
     renderGuildSidebar();
+}
+
+// Media servers settings rendering
+function renderMediaServersSettings() {
+    const serversList = document.getElementById('media-servers-list');
+    serversList.innerHTML = '';
+
+    const servers = window.mediaServers || [];
+
+    if (servers.length === 0) {
+        serversList.innerHTML = `
+            <div class="server-list-none">
+                <i data-lucide="server"></i>
+                <div>No media servers configured</div>
+            </div>
+        `;
+    } else {
+        servers.forEach(server => {
+            const item = document.createElement('div');
+            item.className = 'server-list-item';
+            item.innerHTML = `
+                <div class="server-list-info">
+                    <div class="server-list-name">
+                        ${server.name}
+                        ${server.id === 'roturphotos' ? '<span style="font-size: 11px; background: rgba(88, 101, 242, 0.2); color: #5865f2; padding: 2px 6px; border-radius: 4px; margin-left: 8px;">Default</span>' : ''}
+                    </div>
+                    <div class="server-list-url">${server.uploadUrl}</div>
+                </div>
+                <div class="server-list-actions">
+                    <div class="server-list-toggle">
+                        <div class="toggle-switch ${server.enabled ? 'active' : ''}" onclick="toggleServerEnabled('${server.id}')"></div>
+                    </div>
+                    <button class="btn btn-secondary btn-small" onclick="editServer('${server.id}')">
+                        <i data-lucide="edit-2" style="width: 14px; height: 14px;"></i>
+                    </button>
+                    ${server.id !== 'roturphotos' ? `
+                    <button class="btn btn-danger btn-small" onclick="deleteServer('${server.id}')">
+                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                    </button>
+                    ` : ''}
+                </div>
+            `;
+            serversList.appendChild(item);
+        });
+    }
+
+    if (window.lucide) window.lucide.createIcons({ root: serversList });
+}
+
+function toggleServerEnabled(id) {
+    const server = window.getMediaServerById(id);
+    if (server) {
+        window.setMediaServerEnabled(id, !server.enabled);
+        renderMediaServersSettings();
+    }
+}
+
+function deleteServer(id) {
+    if (confirm('Are you sure you want to delete this media server?')) {
+        window.deleteMediaServer(id);
+        renderMediaServersSettings();
+    }
+}
+
+// Server config modal functions
+let editingServerId = null;
+
+function openAddServerModal() {
+    editingServerId = null;
+    document.getElementById('server-modal-title').textContent = 'Add Media Server';
+    document.getElementById('server-config-form').reset();
+    document.getElementById('headers-list').innerHTML = '';
+    document.getElementById('body-params-list').innerHTML = '';
+    const modal = document.getElementById('server-config-modal');
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    updateAuthOptions();
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function editServer(id) {
+    const server = window.getMediaServerById(id);
+    if (!server) return;
+
+    editingServerId = id;
+    document.getElementById('server-modal-title').textContent = 'Edit Media Server';
+
+    const form = document.getElementById('server-config-form');
+    form.name.value = server.name || '';
+    form.uploadUrl.value = server.uploadUrl || '';
+    form.method.value = server.method || 'POST';
+    form.enabled.value = server.enabled ? 'true' : 'false';
+    form.fileParamName.value = server.fileParamName || '';
+    form.responseUrlPath.value = server.responseUrlPath || '';
+    form.urlTemplate.value = server.urlTemplate || '';
+    form.requiresAuth.value = server.requiresAuth ? 'true' : 'false';
+    form.authType.value = server.authType || 'session';
+    form.authParam.value = server.apiKey || '';
+
+    document.getElementById('headers-list').innerHTML = '';
+    if (server.headers) {
+        server.headers.forEach(h => addHeaderRow(h.key, h.value));
+    }
+
+    document.getElementById('body-params-list').innerHTML = '';
+    if (server.bodyParams) {
+        server.bodyParams.forEach(p => addBodyParamRow(p.key, p.value));
+    }
+
+    updateAuthOptions();
+    const modal = document.getElementById('server-config-modal');
+    modal.style.display = 'flex';
+    modal.classList.add('active');
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function closeServerConfigModal() {
+    document.getElementById('server-config-modal').classList.remove('active');
+    document.getElementById('server-config-modal').style.display = 'none';
+    editingServerId = null;
+}
+
+function updateAuthOptions() {
+    const requiresAuth = document.querySelector('[name="requiresAuth"]').value === 'true';
+    const authType = document.querySelector('[name="authType"]').value;
+    const authOptions = document.getElementById('auth-options');
+    const authParamGroup = document.getElementById('auth-param-group');
+    const authParamLabel = document.getElementById('auth-param-label');
+
+    authOptions.style.display = requiresAuth ? 'block' : 'none';
+
+    if (requiresAuth && authType !== 'session') {
+        authParamGroup.style.display = 'flex';
+        authParamLabel.textContent = authType === 'token' ? 'Bearer Token' : 'API Key';
+    } else {
+        authParamGroup.style.display = 'none';
+    }
+}
+
+function addHeaderRow(key = '', value = '') {
+    const container = document.getElementById('headers-list');
+    const row = document.createElement('div');
+    row.className = 'param-row';
+    row.innerHTML = `
+        <input type="text" class="setting-input header-key" placeholder="Header name" value="${key}">
+        <input type="text" class="setting-input header-value" placeholder="Header value" value="${value}">
+        <button type="button" class="btn btn-danger btn-small" onclick="this.parentElement.remove()">
+            <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+        </button>
+    `;
+    container.appendChild(row);
+    if (window.lucide) window.lucide.createIcons({ root: row });
+}
+
+function addBodyParamRow(key = '', value = '') {
+    const container = document.getElementById('body-params-list');
+    const row = document.createElement('div');
+    row.className = 'param-row';
+    row.innerHTML = `
+        <input type="text" class="setting-input param-key" placeholder="Parameter name" value="${key}">
+        <input type="text" class="setting-input param-value" placeholder="Parameter value" value="${value}">
+        <button type="button" class="btn btn-danger btn-small" onclick="this.parentElement.remove()">
+            <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+        </button>
+    `;
+    container.appendChild(row);
+    if (window.lucide) window.lucide.createIcons({ root: row });
+}
+
+// Handle server config form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const serverForm = document.getElementById('server-config-form');
+    if (serverForm) {
+        serverForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(serverForm);
+            const headers = [];
+            document.querySelectorAll('#headers-list .param-row').forEach(row => {
+                const key = row.querySelector('.header-key').value.trim();
+                const value = row.querySelector('.header-value').value.trim();
+                if (key && value) {
+                    headers.push({ key, value });
+                }
+            });
+
+            const bodyParams = [];
+            document.querySelectorAll('#body-params-list .param-row').forEach(row => {
+                const key = row.querySelector('.param-key').value.trim();
+                const value = row.querySelector('.param-value').value.trim();
+                if (key && value) {
+                    bodyParams.push({ key, value });
+                }
+            });
+
+            const config = {
+                id: editingServerId || window.generateServerId(),
+                name: formData.get('name'),
+                uploadUrl: formData.get('uploadUrl'),
+                method: formData.get('method'),
+                enabled: formData.get('enabled') === 'true',
+                fileParamName: formData.get('fileParamName') || null,
+                responseUrlPath: formData.get('responseUrlPath') || null,
+                urlTemplate: formData.get('urlTemplate') || null,
+                requiresAuth: formData.get('requiresAuth') === 'true',
+                authType: formData.get('authType'),
+                headers,
+                bodyParams
+            };
+
+            if (formData.get('authParam')) {
+                config.apiKey = formData.get('authParam');
+            }
+
+            window.addMediaServer(config);
+            closeServerConfigModal();
+            renderMediaServersSettings();
+        });
+    }
+
+    // Auth type change handler
+    const authTypeSelect = document.querySelector('[name="authType"]');
+    const requiresAuthSelect = document.querySelector('[name="requiresAuth"]');
+    if (authTypeSelect) {
+        authTypeSelect.addEventListener('change', updateAuthOptions);
+    }
+    if (requiresAuthSelect) {
+        requiresAuthSelect.addEventListener('change', updateAuthOptions);
+    }
+
+    // Upload file input handler
+    const uploadInput = document.getElementById('image-upload-input');
+    if (uploadInput) {
+        uploadInput.addEventListener('change', function(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                handleFileUpload(files);
+            }
+            this.value = '';
+        });
+    }
+
+    // Drag and drop handlers
+    const messagesContainer = document.querySelector('.messages-container');
+    if (messagesContainer) {
+        messagesContainer.addEventListener('dragover', handleDragOver);
+        messagesContainer.addEventListener('drop', handleDrop);
+    }
+    const dropzone = document.getElementById('upload-dropzone');
+    if (dropzone) {
+        dropzone.addEventListener('dragenter', handleDragEnter);
+        dropzone.addEventListener('dragleave', handleDragLeave);
+        dropzone.addEventListener('dragover', handleDragOver);
+        dropzone.addEventListener('drop', handleDrop);
+    }
+    const inputArea = document.querySelector('.input-area');
+    if (inputArea) {
+        inputArea.addEventListener('dragenter', handleDragEnter);
+        inputArea.addEventListener('dragleave', handleDragLeave);
+        inputArea.addEventListener('dragover', handleDragOver);
+        inputArea.addEventListener('drop', handleDrop);
+    }
+});
+
+// Upload functions
+async function triggerImageUpload() {
+    document.getElementById('image-upload-input').click();
+}
+
+let dragCounter = 0;
+let hideDropzoneTimeout = null;
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function handleDragEnter(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter++;
+    showDropzone();
+}
+
+function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter--;
+    if (dragCounter <= 0) {
+        dragCounter = 0;
+        queueHideDropzone();
+    }
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter = 0;
+    hideDropzone();
+
+    const files = e.dataTransfer.files;
+    const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+
+    if (imageFiles.length > 0) {
+        handleFileUpload(imageFiles);
+    }
+}
+
+function showDropzone() {
+    if (hideDropzoneTimeout) {
+        clearTimeout(hideDropzoneTimeout);
+        hideDropzoneTimeout = null;
+    }
+    const dropzone = document.getElementById('upload-dropzone');
+    dropzone.classList.add('visible', 'active');
+    document.querySelector('.input-area').style.pointerEvents = 'none';
+}
+
+function queueHideDropzone() {
+    hideDropzoneTimeout = setTimeout(hideDropzone, 100);
+}
+
+function hideDropzone() {
+    const dropzone = document.getElementById('upload-dropzone');
+    dropzone.classList.remove('visible', 'active');
+    setTimeout(() => {
+        dropzone.classList.remove('active');
+    }, 200);
+    document.querySelector('.input-area').style.pointerEvents = '';
+}
+
+async function handleFileUpload(files) {
+    const server = window.getEnabledMediaServer();
+    if (!server) {
+        showError('No media server configured. Please add a media server in settings.');
+        openSettings();
+        return;
+    }
+
+    for (const file of files) {
+        try {
+            showUploadProgress(file.name);
+            const imageUrl = await window.uploadImage(file, server);
+            hideUploadProgress();
+
+            if (!state.currentChannel) {
+                showError('Please select a channel first');
+                return;
+            }
+
+            const msg = {
+                cmd: 'message_new',
+                channel: state.currentChannel.name,
+                content: imageUrl
+            };
+
+            wsSend(msg, state.serverUrl);
+        } catch (error) {
+            hideUploadProgress();
+            showError(`Failed to upload ${file.name}: ${error.message}`);
+            console.error('Upload error:', error);
+        }
+    }
+}
+
+let uploadProgressElement = null;
+
+function showUploadProgress(fileName) {
+    hideUploadProgress();
+    input = document.getElementById('message-input');
+    input.value = `[Uploading ${fileName}...]`;
+    input.disabled = true;
+}
+
+function hideUploadProgress() {
+    const input = document.getElementById('message-input');
+    input.value = '';
+    input.disabled = false;
+    input.focus();
 }
 
 function showDMContextMenu(event, dmServer) {
