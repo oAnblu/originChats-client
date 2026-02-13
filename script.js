@@ -983,14 +983,7 @@ function renderGuildSidebar() {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             item.classList.add('drag-over');
-        });
-
-        item.addEventListener('dragleave', (e) => {
-
-            if (!item.contains(e.relatedTarget)) {
-                item.classList.remove('drag-over');
-            }
-        });
+});
 
         item.addEventListener('drop', (e) => {
             e.preventDefault();
@@ -1031,14 +1024,23 @@ function showGuildContextMenu(event, server) {
     const menu = document.getElementById('context-menu');
     menu.innerHTML = '';
 
+    const copyUrlItem = document.createElement('div');
+    copyUrlItem.className = 'context-menu-item';
+    copyUrlItem.textContent = 'Copy URL';
+    copyUrlItem.onclick = () => {
+        navigator.clipboard.writeText(server.url);
+        closeContextMenu();
+    };
+
     const leaveItem = document.createElement('div');
     leaveItem.className = 'context-menu-item danger';
     leaveItem.textContent = 'Leave Server';
     leaveItem.onclick = () => {
         leaveServer(server.url);
-        menu.style.display = 'none';
+        closeContextMenu();
     };
 
+    menu.appendChild(copyUrlItem);
     menu.appendChild(leaveItem);
 
     if (!isMobile()) {
@@ -1053,10 +1055,16 @@ function showGuildContextMenu(event, server) {
         menu.style.top = y + 'px';
     }
     menu.style.display = 'block';
+
+    if (typeof contextMenuOpen !== 'undefined') {
+        contextMenuOpen = true;
+    }
 }
 
 async function leaveServer(url) {
     if (confirm('Leave this server?')) {
+        wsSend({ cmd: 'leave' }, url);
+
         state.servers = state.servers.filter(s => s.url !== url);
         await saveServers();
 
@@ -3509,8 +3517,10 @@ function openLinkContextMenu(event, url) {
     contextMenuOpen = true;
 }
 
-document.addEventListener("click", () => {
-    if (contextMenuOpen) closeContextMenu();
+document.addEventListener("click", (e) => {
+    if (contextMenuOpen && !e.target.closest('.context-menu') && !e.target.closest('.guild-item')) {
+        closeContextMenu();
+    }
 });
 
 function closeContextMenu() {
@@ -4781,7 +4791,7 @@ function showDMContextMenu(event, dmServer) {
         // Save to localStorage
         localStorage.setItem('originchats_dm_servers', JSON.stringify(state.dmServers));
         renderGuildSidebar();
-        menu.style.display = 'none';
+        closeContextMenu();
     };
 
     menu.appendChild(removeItem);
@@ -4796,6 +4806,10 @@ function showDMContextMenu(event, dmServer) {
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
     menu.style.display = 'block';
+
+    if (typeof contextMenuOpen !== 'undefined') {
+        contextMenuOpen = true;
+    }
 }
 
 window.addEventListener('focus', function () {
