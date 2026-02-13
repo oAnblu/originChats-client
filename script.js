@@ -4778,6 +4778,29 @@ function hideUploadProgress() {
     input.focus();
 }
 
+const input = document.getElementById('message-input');
+if (input) {
+    input.addEventListener('paste', function (e) {
+        const items = e.clipboardData.items;
+        const imageFiles = [];
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                if (file) {
+                    imageFiles.push(file);
+                }
+            }
+        }
+
+        if (imageFiles.length > 0) {
+            e.preventDefault();
+            handleFileUpload(imageFiles);
+        }
+    });
+}
+
 function showDMContextMenu(event, dmServer) {
     const menu = document.getElementById('context-menu');
     menu.innerHTML = '';
