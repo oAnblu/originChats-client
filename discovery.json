@@ -12,5 +12,19 @@
     "owner": "fries",
     "created_at": 1770685656688,
     "icon": "https://avatars.rotur.dev/fries"
+  },
+  {
+    "icon": "https://cdn.discordapp.com/icons/1416156798628532456/4d71a08e2a467e53e6ea7b0ce15a34ce.webp?size=320&quality=lossless",
+    "name": "Katnip",
+    "owner": "b1j2754",
+    "created_at": 1770941397057,
+    "url": "chats.katnip.org"
+  },
+  {
+    "name": "Milo's server",
+    "owner": "MiloDev123",
+    "created_at": 1770941397057,
+    "icon": "https://milosantos.com/files/milo_pfp.png",
+    "url": "originchats.milosantos.com"
   }
 ]
