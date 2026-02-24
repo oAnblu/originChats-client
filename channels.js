@@ -4,8 +4,6 @@ function renderChannels() {
     const container = document.getElementById('channels-list');
     if (!container) return;
 
-    console.log('renderChannels called, unreadByChannel:', state.unreadByChannel);
-
     const currentChannels = getChannelsToRender();
     const renderedKeys = new Set();
     let separatorIndex = 0;
@@ -62,9 +60,8 @@ function getChannelsToRender() {
     }
 
     state.channels.forEach(channel => {
-        if (!checkPermission(channel.permissions?.view, state.currentUser.roles)) return;
+        if (!checkPermission(channel.permissions?.view, state.currentUser?.roles)) return;
         if (channel.name === 'cmds') return;
-        // Hide channels with unrecognized types
         if (!RECOGNIZED_CHANNEL_TYPES.includes(channel.type)) return;
         channels.push(channel);
     });
@@ -283,16 +280,9 @@ function checkVoiceUserSpeaking(user, channelName) {
   if (voiceManager && voiceManager.currentChannel === channelName) {
     if (state.currentUser && user.username.toLowerCase() === state.currentUser.username.toLowerCase()) {
       isSpeaking = voiceManager.isSpeaking;
-    } else if (voiceManager.participants) {
-      const usernameLower = user.username.toLowerCase();
-      let foundParticipant = null;
-      for (const [key, value] of voiceManager.participants) {
-        if (value.username.toLowerCase() === usernameLower) {
-          foundParticipant = value;
-          break;
-        }
-      }
-      if (foundParticipant && foundParticipant.speaking) {
+    } else {
+      const participant = voiceManager._findParticipantByUsername(user.username);
+      if (participant && participant.speaking) {
         isSpeaking = true;
       }
     }
@@ -349,48 +339,26 @@ function createVoiceUserElement(user, channelName) {
 // Helper function to get users in a voice channel
 function getVoiceChannelUsers(channelName) {
     const users = [];
-    const seenUsernames = new Set();
 
-    // Get the channel data which includes voice_state
     const channel = state.channels.find(c => c.name === channelName);
 
-    // Add users from channel voice_state (server-provided)
     if (channel && channel.voice_state) {
         channel.voice_state.forEach(voiceUser => {
-            seenUsernames.add(voiceUser.username.toLowerCase());
+            const isCurrentUser = state.currentUser && voiceUser.username.toLowerCase() === state.currentUser.username.toLowerCase();
+
+            let muted = voiceUser.muted || false;
+            let pfp = voiceUser.pfp || null;
+
+            // Override muted state for current user from local voiceManager
+            if (isCurrentUser && voiceManager) {
+                muted = voiceManager.isMuted;
+            }
+
             users.push({
                 username: voiceUser.username,
-                pfp: typeof getAvatarSrc === 'function' ? getAvatarSrc(voiceUser.username) : `https://avatars.rotur.dev/${voiceUser.username}`,
-                muted: voiceUser.muted || false
+                pfp: pfp || (typeof getAvatarSrc === 'function' ? getAvatarSrc(voiceUser.username) : `https://avatars.rotur.dev/${voiceUser.username}`),
+                muted: muted
             });
-        });
-    }
-
-    // Check if current user is in this channel
-    if (voiceManager && voiceManager.currentChannel === channelName && state.currentUser && state.currentUser.username) {
-        const currentUsernameLower = state.currentUser.username.toLowerCase();
-        if (!seenUsernames.has(currentUsernameLower)) {
-            seenUsernames.add(currentUsernameLower);
-            users.push({
-                username: state.currentUser.username,
-                pfp: typeof getAvatarSrc === 'function' ? getAvatarSrc(state.currentUser.username) : `https://avatars.rotur.dev/${state.currentUser.username}`,
-                muted: voiceManager.isMuted
-            });
-        }
-    }
-
-    // Add other participants in this channel
-    if (voiceManager && voiceManager.participants) {
-        voiceManager.participants.forEach((participant) => {
-            const participantUsernameLower = participant.username.toLowerCase();
-            if (participant.channel === channelName && !seenUsernames.has(participantUsernameLower)) {
-                seenUsernames.add(participantUsernameLower);
-                users.push({
-                    username: participant.username,
-                    pfp: typeof getAvatarSrc === 'function' ? getAvatarSrc(participant.username) : `https://avatars.rotur.dev/${participant.username}`,
-                    muted: participant.muted
-                });
-            }
         });
     }
 
@@ -447,35 +415,81 @@ function updateVoiceChannelElement(wrapper, channel, index) {
     nameSpan.textContent = getChannelDisplayName(channel);
   }
 
-  // Update user count badge
+  // Get current users
   const connectedUsers = getVoiceChannelUsers(channel.name);
-  const existingCount = div.querySelector('.voice-user-count');
-  if (existingCount) {
-    existingCount.remove();
-  }
+
+  // Update or create user count badge
+  let countBadge = div.querySelector('.voice-user-count');
   if (connectedUsers.length > 0) {
-    const countBadge = document.createElement('span');
-    countBadge.className = 'voice-user-count';
+    if (!countBadge) {
+      countBadge = document.createElement('span');
+      countBadge.className = 'voice-user-count';
+      div.appendChild(countBadge);
+    }
     countBadge.textContent = connectedUsers.length;
-    div.appendChild(countBadge);
+  } else if (countBadge) {
+    countBadge.remove();
   }
 
-  // Update users list
-  const existingList = wrapper.querySelector('.voice-channel-user-list');
-  if (existingList) {
-    existingList.remove();
-  }
+  // Update or create users list - optimized to avoid full re-renders
+  let usersList = wrapper.querySelector('.voice-channel-user-list');
+  const usernames = connectedUsers.map(u => u.username.toLowerCase());
+  const existingUsernames = new Set();
 
-  if (connectedUsers.length > 0) {
-    const usersList = document.createElement('div');
-    usersList.className = 'voice-channel-user-list';
+  if (usersList) {
+    // Mark existing users and update their state
+    const existingRows = usersList.querySelectorAll('.voice-channel-user');
+    existingRows.forEach(row => {
+      const rowUsername = row.dataset.voiceUsername;
+      if (rowUsername) {
+        existingUsernames.add(rowUsername.toLowerCase());
 
-    connectedUsers.forEach(user => {
-      const userRow = createVoiceUserElement(user, channel.name);
-      usersList.appendChild(userRow);
+        const user = connectedUsers.find(u => u.username.toLowerCase() === rowUsername.toLowerCase());
+        if (user) {
+          // Update muted state
+          if (user.muted) {
+            row.classList.add('muted');
+          } else {
+            row.classList.remove('muted');
+          }
+
+          // Update speaking state
+          const { shouldShowSpeaking } = checkVoiceUserSpeaking(user, channel.name);
+          if (shouldShowSpeaking) {
+            row.classList.add('speaking');
+          } else {
+            row.classList.remove('speaking');
+          }
+        }
+      }
     });
 
-    wrapper.appendChild(usersList);
+    // Remove users no longer in channel
+    existingRows.forEach(row => {
+      const rowUsername = row.dataset.voiceUsername?.toLowerCase();
+      if (rowUsername && !usernames.includes(rowUsername)) {
+        row.remove();
+      }
+    });
+  }
+
+  // Add new users
+  if (connectedUsers.length > 0) {
+    if (!usersList) {
+      usersList = document.createElement('div');
+      usersList.className = 'voice-channel-user-list';
+      wrapper.appendChild(usersList);
+    }
+
+    connectedUsers.forEach(user => {
+      const userLower = user.username.toLowerCase();
+      if (!existingUsernames.has(userLower)) {
+        const userRow = createVoiceUserElement(user, channel.name);
+        usersList.appendChild(userRow);
+      }
+    });
+  } else if (usersList) {
+    usersList.remove();
   }
 
   updateChannelActiveState(div, channel.name, index);

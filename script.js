@@ -748,7 +748,9 @@ function openDM(username) {
 
 async function acceptFriendRequest(username) {
     try {
-        const response = await fetch(`https://api.rotur.dev/friends/accept/${encodeURIComponent(username)}?auth=${encodeURIComponent(state.token)}`);
+        const response = await fetch(`https://api.rotur.dev/friends/accept/${encodeURIComponent(username)}?auth=${encodeURIComponent(state.token)}`, {
+            method: 'POST'
+        });
         if (response.ok) {
             await fetchMyAccountData();
             renderDMTabContent('requests');
@@ -760,7 +762,9 @@ async function acceptFriendRequest(username) {
 
 async function rejectFriendRequest(username) {
     try {
-        const response = await fetch(`https://api.rotur.dev/friends/reject/${encodeURIComponent(username)}?auth=${encodeURIComponent(state.token)}`);
+        const response = await fetch(`https://api.rotur.dev/friends/reject/${encodeURIComponent(username)}?auth=${encodeURIComponent(state.token)}`, {
+            method: 'POST'
+        });
         if (response.ok) {
             await fetchMyAccountData();
             renderDMTabContent('requests');
@@ -1572,7 +1576,9 @@ async function joinDiscoveryServer(server) {
 }
 
 function switchServer(url) {
+    console.log('[DEBUG] switchServer called with url:', url, 'current state.switchingServer:', state.switchingServer);
     if (state.switchingServer) {
+        console.log('[DEBUG] switchServer blocked - already switching');
         return;
     }
     state.switchingServer = true;
@@ -1618,6 +1624,11 @@ function switchServer(url) {
     const server = state.servers.find(s => s.url === url);
     const serverName = server ? server.name : (url === 'dms.mistium.com' ? 'Direct Messages' : url);
     document.getElementById('server-name').innerHTML = `<span>${serverName}</span>`;
+
+    const serverSettingsBtn = document.getElementById('server-settings-btn');
+    if (serverSettingsBtn) {
+        serverSettingsBtn.style.display = url === 'dms.mistium.com' ? 'none' : 'flex';
+    }
 
     let channelHeaderName = document.getElementById('channel-header-name');
     const serverChannelHeader = document.getElementById('server-channel-header');
@@ -2081,8 +2092,11 @@ async function handleMessage(msg, serverUrl) {
             break;
 
         case 'channels_get':
+            console.log('[DEBUG] channels_get received for server:', serverUrl, 'msg.val:', msg.val);
             state.channelsByServer[serverUrl] = msg.val;
             state.loadingChannelsByServer[serverUrl] = false;
+            console.log('[DEBUG] state.channelsByServer:', state.channelsByServer);
+            console.log('[DEBUG] state.serverUrl:', state.serverUrl);
             if (state.serverUrl === serverUrl) {
                 renderChannels();
                 if (!state.currentChannel && state.channels.length > 0 && serverUrl !== 'dms.mistium.com') {
@@ -2091,9 +2105,7 @@ async function handleMessage(msg, serverUrl) {
                     selectChannel(lastChannel || state.channels[0]);
                 }
                 if (serverUrl === 'dms.mistium.com' && !state.currentChannel) {
-                    if (isMobile()) {
-                        selectHomeChannel();
-                    }
+                    selectHomeChannel();
                 }
                 if (state.pendingChannelSelectsByServer[serverUrl] && serverUrl !== 'dms.mistium.com') {
                     const pendingChannel = state.pendingChannelSelectsByServer[serverUrl];
@@ -2527,6 +2539,55 @@ async function handleMessage(msg, serverUrl) {
         case 'voice_user_updated':
             if (voiceManager) {
                 voiceManager.handleUserUpdated(msg);
+            }
+            break;
+        case 'roles_list':
+            if (window.serverSettingsState && msg.roles) {
+                window.serverSettingsState.roles = msg.roles;
+                if (typeof window.renderRoles === 'function') {
+                    window.renderRoles();
+                }
+            }
+            break;
+        case 'channel_create':
+            if (msg.created && state.channelsByServer[serverUrl]) {
+                wsSend({ cmd: 'channels_get' }, serverUrl);
+            }
+            break;
+        case 'channel_delete':
+            if (msg.deleted && state.channelsByServer[serverUrl]) {
+                wsSend({ cmd: 'channels_get' }, serverUrl);
+            }
+            break;
+        case 'channel_move':
+            if (msg.moved && state.channelsByServer[serverUrl]) {
+                wsSend({ cmd: 'channels_get' }, serverUrl);
+            }
+            break;
+        case 'channel_update':
+            if (msg.updated && state.channelsByServer[serverUrl]) {
+                wsSend({ cmd: 'channels_get' }, serverUrl);
+            }
+            break;
+        case 'role_create':
+            if (msg.created && window.serverSettingsState) {
+                wsSend({ cmd: 'roles_list' }, serverUrl);
+            }
+            break;
+        case 'role_delete':
+            if (msg.deleted && window.serverSettingsState) {
+                wsSend({ cmd: 'roles_list' }, serverUrl);
+            }
+            break;
+        case 'role_update':
+            if (msg.updated && window.serverSettingsState) {
+                wsSend({ cmd: 'roles_list' }, serverUrl);
+            }
+            break;
+        case 'user_roles_add':
+        case 'user_roles_remove':
+            if ((msg.added || msg.removed) && state.serverUrl === serverUrl) {
+                wsSend({ cmd: 'users_list' }, serverUrl);
             }
             break;
     }
@@ -3721,7 +3782,8 @@ function makeMessageElement(msg, isSameUserRecent, loadPromises = []) {
     const user = getUserByUsernameCaseInsensitive(msg.user) || { username: msg.user };
     const timestamp = formatTimestamp(msg.timestamp);
     const isReply = "reply_to" in msg
-    const isHead = !isSameUserRecent || isReply;
+    const isNoGrouping = document.body.classList.contains('no-message-grouping');
+    const isHead = !isSameUserRecent || isReply || isNoGrouping;
 
     const isBlocked = Array.isArray(state.currentUser?.sys?.blocked) && state.currentUser.sys.blocked.includes(msg.user);
 
@@ -4470,6 +4532,7 @@ function closeContextMenu() {
 
 function checkPermission(roles, permissions) {
     if (!roles?.length) return true;
+    if (!permissions) return false;
     return roles.some(r => permissions.includes(r));
 }
 
@@ -4816,12 +4879,16 @@ function handleMentionInput() {
     } else if (lastWord.startsWith(':') && window.shortcodeMap) {
         closeMentionPopup();
         closeChannelPopup();
-        emojiState.active = true;
-        emojiState.query = lastWord.substring(1).toLowerCase();
-        emojiState.startIndex = cursorPos - lastWord.length;
-        emojiState.selectedIndex = 0;
-
-        filterEmojis(emojiState.query);
+        const emojiQuery = lastWord.substring(1).toLowerCase();
+        if (emojiQuery.length > 3) {
+            emojiState.active = true;
+            emojiState.query = emojiQuery;
+            emojiState.startIndex = cursorPos - lastWord.length;
+            emojiState.selectedIndex = 0;
+            filterEmojis(emojiState.query);
+        } else {
+            closeEmojiPopup();
+        }
     } else {
         closeMentionPopup();
         closeEmojiPopup();
@@ -6384,7 +6451,18 @@ function initAppearanceSettings() {
     const wallpaperPreview = document.getElementById('wallpaper-preview');
     const clearWallpaperBtn = document.getElementById('clear-wallpaper-btn');
     const wallpaperOpacity = document.getElementById('wallpaper-opacity');
+    const wallpaperOpacitySlider = document.getElementById('wallpaper-opacity-slider');
     const themePreviews = document.querySelectorAll('.theme-preview-option');
+
+    const borderRadiusSlider = document.getElementById('border-radius-slider');
+    const fontFamilySelect = document.getElementById('font-family-select');
+    const messageGrouping = document.getElementById('message-grouping');
+    const enableAnimations = document.getElementById('enable-animations');
+    const gifAutoplay = document.getElementById('gif-autoplay');
+    const reduceMotion = document.getElementById('reduce-motion');
+    const showScrollbars = document.getElementById('show-scrollbars');
+    const showAvatarBorders = document.getElementById('show-avatar-borders');
+    const showMessageShadows = document.getElementById('show-message-shadows');
 
     // Theme handling
     if (themeSelect) {
@@ -6415,12 +6493,72 @@ function initAppearanceSettings() {
 
     updateThemePreview(localStorage.getItem('originchats_theme') || 'dark');
 
+    // Message grouping
+    if (messageGrouping) {
+        const currentGrouping = localStorage.getItem('originchats_message_grouping') !== 'false';
+        messageGrouping.checked = currentGrouping;
+        applyMessageGrouping(currentGrouping);
+
+        messageGrouping.addEventListener('change', (e) => {
+            const grouping = e.target.checked;
+            localStorage.setItem('originchats_message_grouping', grouping);
+            applyMessageGrouping(grouping);
+        });
+    }
+
+    // Border radius
+    if (borderRadiusSlider) {
+        const currentRadiusStorage = localStorage.getItem('originchats_border_radius');
+        const currentRadius = currentRadiusStorage ? parseInt(currentRadiusStorage) : 12;
+        borderRadiusSlider.value = currentRadius;
+        const valueSpan = document.getElementById('border-radius-value');
+        if (valueSpan) valueSpan.textContent = currentRadius + 'px';
+        applyBorderRadius(currentRadius);
+
+        borderRadiusSlider.addEventListener('input', (e) => {
+            const radius = parseInt(e.target.value);
+            if (valueSpan) valueSpan.textContent = radius + 'px';
+            localStorage.setItem('originchats_border_radius', radius);
+            applyBorderRadius(radius);
+        });
+    }
+
+    // Font family
+    if (fontFamilySelect) {
+        const currentFont = localStorage.getItem('originchats_font_family') || 'system';
+        fontFamilySelect.value = currentFont;
+        applyFontFamily(currentFont);
+
+        fontFamilySelect.addEventListener('change', (e) => {
+            const font = e.target.value;
+            localStorage.setItem('originchats_font_family', font);
+            applyFontFamily(font);
+        });
+    }
+
     // Wallpaper handling
     if (wallpaperUpload) {
         const currentWallpaper = localStorage.getItem('originchats_wallpaper');
+        const currentWallpaperOpacity = localStorage.getItem('originchats_wallpaper_opacity') || '100';
+        
         if (currentWallpaper) {
-            applyWallpaper(currentWallpaper);
+            applyWallpaper(currentWallpaper, currentWallpaperOpacity);
             updateWallpaperPreview(currentWallpaper);
+        }
+
+        if (wallpaperOpacitySlider) {
+            wallpaperOpacitySlider.value = currentWallpaperOpacity;
+            const opacityValue = document.getElementById('wallpaper-opacity-value');
+            if (opacityValue) opacityValue.textContent = currentWallpaperOpacity + '%';
+            
+            wallpaperOpacitySlider.addEventListener('input', (e) => {
+                const opacity = e.target.value;
+                if (opacityValue) opacityValue.textContent = opacity + '%';
+                localStorage.setItem('originchats_wallpaper_opacity', opacity);
+                if (currentWallpaper) {
+                    applyWallpaper(currentWallpaper, opacity);
+                }
+            });
         }
 
         wallpaperUpload.addEventListener('change', (e) => {
@@ -6430,7 +6568,9 @@ function initAppearanceSettings() {
                 reader.onload = (event) => {
                     const dataUrl = event.target.result;
                     localStorage.setItem('originchats_wallpaper', dataUrl);
-                    applyWallpaper(dataUrl);
+                    const opacity = wallpaperOpacitySlider ? wallpaperOpacitySlider.value : '100';
+                    localStorage.setItem('originchats_wallpaper_opacity', opacity);
+                    applyWallpaper(dataUrl, opacity);
                     updateWallpaperPreview(dataUrl);
                 };
                 reader.readAsDataURL(file);
@@ -6441,9 +6581,9 @@ function initAppearanceSettings() {
     if (clearWallpaperBtn) {
         clearWallpaperBtn.addEventListener('click', () => {
             localStorage.removeItem('originchats_wallpaper');
-            applyWallpaper('');
+            applyWallpaper('', '100');
             updateWallpaperPreview('');
-            wallpaperUpload.value = '';
+            if (wallpaperUpload) wallpaperUpload.value = '';
         });
     }
 
@@ -6458,6 +6598,126 @@ function initAppearanceSettings() {
             applyWallpaperDimming(dimmed);
         });
     }
+
+    // Animations
+    if (enableAnimations) {
+        const currentAnimations = localStorage.getItem('originchats_enable_animations') !== 'false';
+        enableAnimations.checked = currentAnimations;
+        applyAnimations(currentAnimations);
+
+        enableAnimations.addEventListener('change', (e) => {
+            const enabled = e.target.checked;
+            localStorage.setItem('originchats_enable_animations', enabled);
+            applyAnimations(enabled);
+        });
+    }
+
+    if (gifAutoplay) {
+        const currentGifAutoplay = localStorage.getItem('originchats_gif_autoplay') !== 'false';
+        gifAutoplay.checked = currentGifAutoplay;
+        window.gifAutoplayEnabled = currentGifAutoplay;
+
+        gifAutoplay.addEventListener('change', (e) => {
+            const enabled = e.target.checked;
+            localStorage.setItem('originchats_gif_autoplay', enabled);
+            window.gifAutoplayEnabled = enabled;
+        });
+    }
+
+    if (reduceMotion) {
+        const currentReduceMotion = localStorage.getItem('originchats_reduce_motion') === 'true';
+        reduceMotion.checked = currentReduceMotion;
+        applyReduceMotion(currentReduceMotion);
+
+        reduceMotion.addEventListener('change', (e) => {
+            const reduce = e.target.checked;
+            localStorage.setItem('originchats_reduce_motion', reduce);
+            applyReduceMotion(reduce);
+        });
+    }
+
+    // UI Elements
+    if (showScrollbars) {
+        const currentShowScrollbars = localStorage.getItem('originchats_show_scrollbars') !== 'false';
+        showScrollbars.checked = currentShowScrollbars;
+        applyScrollbars(currentShowScrollbars);
+
+        showScrollbars.addEventListener('change', (e) => {
+            const show = e.target.checked;
+            localStorage.setItem('originchats_show_scrollbars', show);
+            applyScrollbars(show);
+        });
+    }
+
+    if (showAvatarBorders) {
+        const currentShowAvatarBorders = localStorage.getItem('originchats_show_avatar_borders') !== 'false';
+        showAvatarBorders.checked = currentShowAvatarBorders;
+        applyAvatarBorders(currentShowAvatarBorders);
+
+        showAvatarBorders.addEventListener('change', (e) => {
+            const show = e.target.checked;
+            localStorage.setItem('originchats_show_avatar_borders', show);
+            applyAvatarBorders(show);
+        });
+    }
+
+    if (showMessageShadows) {
+        const currentShowMessageShadows = localStorage.getItem('originchats_show_message_shadows') !== 'false';
+        showMessageShadows.checked = currentShowMessageShadows;
+        applyMessageShadows(currentShowMessageShadows);
+
+        showMessageShadows.addEventListener('change', (e) => {
+            const show = e.target.checked;
+            localStorage.setItem('originchats_show_message_shadows', show);
+            applyMessageShadows(show);
+        });
+    }
+}
+
+function applyMessageGrouping(enabled) {
+    document.body.classList.toggle('no-message-grouping', !enabled);
+    // Re-render messages to show/hide headers
+    const messages = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name];
+    if (messages) {
+        renderMessages(messages, false);
+    }
+}
+
+function applyBorderRadius(radius) {
+    const radiusPx = radius + 'px';
+    const chatRadius = Math.max(radius, 12) + 'px';
+    const avatarRadius = Math.floor(radius / 2) + 'px';
+    
+    document.documentElement.style.setProperty('--border-radius', radiusPx);
+    document.documentElement.style.setProperty('--chat-radius', chatRadius);
+    document.documentElement.style.setProperty('--avatar-radius', avatarRadius);
+}
+
+function applyFontFamily(font) {
+    document.body.classList.remove('font-system', 'font-geometric', 'font-humanist', 'font-mono', 'font-serif');
+    if (font !== 'system') {
+        document.body.classList.add(`font-${font}`);
+    }
+}
+
+function applyAnimations(enabled) {
+    document.body.classList.toggle('no-animations', !enabled);
+}
+
+function applyReduceMotion(reduce) {
+    document.body.classList.toggle('reduce-motion', reduce);
+}
+
+function applyScrollbars(show) {
+    document.body.classList.toggle('hide-scrollbars', !show);
+}
+
+function applyAvatarBorders(show) {
+    document.body.classList.toggle('hide-avatar-borders', !show);
+}
+
+function applyMessageShadows(show) {
+    document.body.classList.toggle('hide-message-shadows', !show);
 }
 
 function updateThemePreview(theme) {
@@ -6491,7 +6751,8 @@ const themes = {
         '--surface-light': '#141419',
         '--surface-hover': '#1f1f26',
         '--border': '#2a2a33',
-        '--primary': '#4e5058'
+        '--primary': '#4e5058',
+        '--primary-hover': '#586068'
     },
     midnight: {
         '--bg': '#0d1117',
@@ -6499,7 +6760,8 @@ const themes = {
         '--surface-light': '#21262d',
         '--surface-hover': '#30363d',
         '--border': '#30363d',
-        '--primary': '#58a6ff'
+        '--primary': '#58a6ff',
+        '--primary-hover': '#79b8ff'
     },
     ocean: {
         '--bg': '#0a1628',
@@ -6507,7 +6769,8 @@ const themes = {
         '--surface-light': '#1a3a5c',
         '--surface-hover': '#2a5070',
         '--border': '#1a4a6c',
-        '--primary': '#4a9eff'
+        '--primary': '#4a9eff',
+        '--primary-hover': '#60aaff'
     },
     forest: {
         '--bg': '#0a1a10',
@@ -6515,7 +6778,8 @@ const themes = {
         '--surface-light': '#1a4028',
         '--surface-hover': '#2a5538',
         '--border': '#1a4528',
-        '--primary': '#4ade80'
+        '--primary': '#4ade80',
+        '--primary-hover': '#5ce68a'
     },
     sunset: {
         '--bg': '#1a0a14',
@@ -6523,7 +6787,8 @@ const themes = {
         '--surface-light': '#401830',
         '--surface-hover': '#5a2840',
         '--border': '#402030',
-        '--primary': '#fb7185'
+        '--primary': '#fb7185',
+        '--primary-hover': '#fc8a9a'
     },
     purple: {
         '--bg': '#1a0a28',
@@ -6531,7 +6796,44 @@ const themes = {
         '--surface-light': '#401860',
         '--surface-hover': '#5a2878',
         '--border': '#402055',
-        '--primary': '#c084fc'
+        '--primary': '#c084fc',
+        '--primary-hover': '#d8a6fd'
+    },
+    rose: {
+        '--bg': '#1a0a1a',
+        '--surface': '#2a1420',
+        '--surface-light': '#402030',
+        '--surface-hover': '#502840',
+        '--border': '#402830',
+        '--primary': '#fb6b8b',
+        '--primary-hover': '#fc8aa5'
+    },
+    amber: {
+        '--bg': '#1a140a',
+        '--surface': '#2a2010',
+        '--surface-light': '#402818',
+        '--surface-hover': '#503820',
+        '--border': '#402818',
+        '--primary': '#fb923c',
+        '--primary-hover': '#fca560'
+    },
+    cyan: {
+        '--bg': '#0a141a',
+        '--surface': '#102028',
+        '--surface-light': '#183040',
+        '--surface-hover': '#284050',
+        '--border': '#183040',
+        '--primary': '#22d3ee',
+        '--primary-hover': '#4ae4f7'
+    },
+    emerald: {
+        '--bg': '#0a1a14',
+        '--surface': '#102818',
+        '--surface-light': '#183828',
+        '--surface-hover': '#284838',
+        '--border': '#183828',
+        '--primary': '#10b981',
+        '--primary-hover': '#34d399'
     }
 };
 
@@ -6544,7 +6846,7 @@ function applyTheme(themeName) {
     }
 }
 
-function applyWallpaper(dataUrl) {
+function applyWallpaper(dataUrl, opacity = '100') {
     const messagesContainer = document.querySelector('.messages-container');
     if (!messagesContainer) return;
 
@@ -6554,9 +6856,11 @@ function applyWallpaper(dataUrl) {
         messagesContainer.style.backgroundPosition = 'center';
         messagesContainer.style.backgroundRepeat = 'no-repeat';
         messagesContainer.style.backgroundAttachment = 'scroll';
+        messagesContainer.style.opacity = opacity / 100;
         messagesContainer.classList.add('has-wallpaper');
     } else {
         messagesContainer.style.backgroundImage = 'none';
+        messagesContainer.style.opacity = '1';
         messagesContainer.classList.remove('has-wallpaper');
         messagesContainer.style.boxShadow = 'none';
     }
@@ -6590,10 +6894,29 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTheme(savedTheme);
     }
 
+    // Apply saved message grouping
+    const savedGrouping = localStorage.getItem('originchats_message_grouping');
+    if (savedGrouping !== null) {
+        applyMessageGrouping(savedGrouping === 'true');
+    }
+
+    // Apply saved border radius
+    const savedBorderRadius = localStorage.getItem('originchats_border_radius');
+    if (savedBorderRadius) {
+        applyBorderRadius(parseInt(savedBorderRadius));
+    }
+
+    // Apply saved font family
+    const savedFontFamily = localStorage.getItem('originchats_font_family');
+    if (savedFontFamily) {
+        applyFontFamily(savedFontFamily);
+    }
+
     // Apply saved wallpaper
     const savedWallpaper = localStorage.getItem('originchats_wallpaper');
+    const savedWallpaperOpacity = localStorage.getItem('originchats_wallpaper_opacity') || '100';
     if (savedWallpaper) {
-        applyWallpaper(savedWallpaper);
+        applyWallpaper(savedWallpaper, savedWallpaperOpacity);
     }
 
     // Apply saved wallpaper dimming
@@ -6602,7 +6925,38 @@ document.addEventListener('DOMContentLoaded', () => {
         applyWallpaperDimming(savedDimmed);
     }
 
+    // Apply saved animations setting
+    const savedAnimations = localStorage.getItem('originchats_enable_animations');
+    if (savedAnimations !== null) {
+        applyAnimations(savedAnimations === 'true');
+    }
+
+    // Apply saved reduce motion
+    const savedReduceMotion = localStorage.getItem('originchats_reduce_motion') === 'true';
+    if (savedReduceMotion) {
+        applyReduceMotion(true);
+    }
+
+    // Apply saved scrollbars
+    const savedScrollbars = localStorage.getItem('originchats_show_scrollbars');
+    if (savedScrollbars !== null) {
+        applyScrollbars(savedScrollbars === 'true');
+    }
+
+    // Apply saved avatar borders
+    const savedAvatarBorders = localStorage.getItem('originchats_show_avatar_borders');
+    if (savedAvatarBorders !== null) {
+        applyAvatarBorders(savedAvatarBorders === 'true');
+    }
+
+    // Apply saved message shadows
+    const savedMessageShadows = localStorage.getItem('originchats_show_message_shadows');
+    if (savedMessageShadows !== null) {
+        applyMessageShadows(savedMessageShadows === 'true');
+    }
+
     // Initialize settings variables
     window.shouldShowEmbeds = localStorage.getItem('originchats_show_embeds') !== 'false';
     window.showTimestamps = localStorage.getItem('originchats_show_timestamps') !== 'false';
+    window.gifAutoplayEnabled = localStorage.getItem('originchats_gif_autoplay') !== 'false';
 });

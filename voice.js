@@ -2,18 +2,40 @@ class VoiceManager {
     constructor() {
         this.peer = null;
         this.currentChannel = null;
-        this.connections = new Map(); // user_id -> connection
-        this.calls = new Map(); // user_id -> call
+        this.connections = new Map();
+        this.calls = new Map();
         this.localStream = null;
-        this.participants = new Map(); // user_id -> {username, peer_id, muted, pfp, speaking}
+        this.participants = new Map();
         this.isMuted = false;
         this.isSpeaking = false;
         this.localAudioElement = null;
-        this.speakingDetectors = new Map(); // user_id -> analyzer
+        this.speakingDetectors = new Map();
+        this.audioContexts = new Map();
+        this.speakingAnimationFrames = new Map();
         this.localAnalyzer = null;
+        this.localAudioContext = null;
         this.micThreshold = parseInt(localStorage.getItem('originchats_mic_threshold') || '30', 10);
 
         this.initPeerJS();
+    }
+
+    _getUserKey(username) {
+        return username.toLowerCase();
+    }
+
+    _findParticipantByUsername(username) {
+        const key = this._getUserKey(username);
+        return this.participants.get(key);
+    }
+
+    _setParticipant(username, data) {
+        const key = this._getUserKey(username);
+        this.participants.set(key, { ...data, username });
+    }
+
+    _deleteParticipant(username) {
+        const key = this._getUserKey(username);
+        this.participants.delete(key);
     }
 
     initPeerJS() {
@@ -61,10 +83,13 @@ class VoiceManager {
             source.connect(analyzer);
 
             this.localAnalyzer = analyzer;
+            this.localAudioContext = audioContext;
 
             const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+            let lastRenderTime = 0;
+            const RENDER_THROTTLE_MS = 100;
 
-            const checkSpeaking = () => {
+            const checkSpeaking = (timestamp) => {
                 if (!this.localAnalyzer) return;
 
                 analyzer.getByteFrequencyData(dataArray);
@@ -77,7 +102,8 @@ class VoiceManager {
                     console.log('[Voice] Speaking state changed:', this.isSpeaking, '(average:', average.toFixed(2), ', threshold:', this.micThreshold + ')');
 
                     // Update channel list to show speaking state
-                    if (typeof renderChannels === 'function') {
+                    if (typeof renderChannels === 'function' && timestamp - lastRenderTime > RENDER_THROTTLE_MS) {
+                        lastRenderTime = timestamp;
                         renderChannels();
                     }
                 }
@@ -85,7 +111,7 @@ class VoiceManager {
                 requestAnimationFrame(checkSpeaking);
             };
 
-            checkSpeaking();
+            requestAnimationFrame(checkSpeaking);
         } catch (error) {
             console.error('[Voice] Failed to setup local speaking detection:', error);
         }
@@ -117,17 +143,38 @@ class VoiceManager {
 
         this.currentChannel = channelName;
 
-        // Get participants from channel voice_state
+        // Get channel and update voice_state locally for immediate UI feedback
         const channel = state.channels.find(c => c.name === channelName);
-        const participants = [];
-        if (channel && channel.voice_state) {
+        if (channel) {
+            if (!channel.voice_state) {
+                channel.voice_state = [];
+            }
+
+            // Add current user to voice_state locally
+            if (state.currentUser) {
+                const usernameLower = state.currentUser.username.toLowerCase();
+                const alreadyInChannel = channel.voice_state.some(v => v.username.toLowerCase() === usernameLower);
+                if (!alreadyInChannel) {
+                    channel.voice_state.push({
+                        username: state.currentUser.username,
+                        peer_id: this.peer.id,
+                        muted: this.isMuted
+                    });
+                }
+            }
+
+            // Populate participants map from voice_state
             channel.voice_state.forEach(voiceUser => {
-                participants.push({
-                    id: crypto.randomUUID(),
-                    username: voiceUser.username,
-                    peer_id: null,
-                    muted: voiceUser.muted || false
-                });
+                const isCurrentUser = state.currentUser && voiceUser.username.toLowerCase() === state.currentUser.username.toLowerCase();
+                if (!isCurrentUser) {
+                    this._setParticipant(voiceUser.username, {
+                        peer_id: voiceUser.peer_id,
+                        muted: voiceUser.muted || false,
+                        pfp: voiceUser.pfp || null,
+                        speaking: false,
+                        channel: channelName
+                    });
+                }
             });
         }
 
@@ -149,9 +196,7 @@ class VoiceManager {
         this.updateMuteButton();
 
         // Update channel list to show you joined
-        if (typeof renderChannels === 'function') {
-            renderChannels();
-        }
+        renderChannels()
 
         return true;
     }
@@ -165,13 +210,41 @@ class VoiceManager {
             cmd: 'voice_leave'
         }, state.serverUrl);
 
+        // Update channel voice_state locally for immediate UI update
+        const channelIndex = state.channels.findIndex(c => c.name === this.currentChannel);
+        if (channelIndex !== -1 && state.channels[channelIndex].voice_state && state.currentUser) {
+            const usernameLower = state.currentUser.username.toLowerCase();
+            state.channels[channelIndex].voice_state = state.channels[channelIndex].voice_state.filter(
+                v => v.username.toLowerCase() !== usernameLower
+            );
+        }
+
         // Close all calls
         this.calls.forEach((call) => {
             call.close();
         });
         this.calls.clear();
 
-        // Clean up speaking detectors
+        // Clean up speaking detectors and animation frames
+        this.speakingAnimationFrames.forEach((frameId) => {
+            cancelAnimationFrame(frameId);
+        });
+        this.speakingAnimationFrames.clear();
+
+        // Close all audio contexts to prevent memory leaks
+        this.audioContexts.forEach((audioContext) => {
+            if (audioContext && audioContext.close) {
+                audioContext.close();
+            }
+        });
+        this.audioContexts.clear();
+
+        // Clean up local audio context
+        if (this.localAudioContext) {
+            this.localAudioContext.close();
+            this.localAudioContext = null;
+        }
+
         this.speakingDetectors.clear();
         this.localAnalyzer = null;
         this.isSpeaking = false;
@@ -201,9 +274,7 @@ class VoiceManager {
         }
 
         // Update channel list to remove your avatar
-        if (typeof renderChannels === 'function') {
-            renderChannels();
-        }
+        renderChannels()
     }
 
     mute() {
@@ -272,25 +343,50 @@ class VoiceManager {
         const { user, channel } = data;
         console.log('[Voice] User joined:', user.username, 'in channel:', channel);
 
-        this.participants.set(user.username, {
-            username: user.username,
-            peer_id: user.peer_id,
-            muted: user.muted,
-            pfp: user.pfp || null,
-            speaking: false,
-            channel: channel
-        });
+        // Check for duplicate user (rejoined before left event processed)
+        const existingParticipant = this._findParticipantByUsername(user.username);
+        if (existingParticipant) {
+            console.warn('[Voice] User already in participants, updating:', user.username);
+            this._setParticipant(user.username, {
+                ...existingParticipant,
+                peer_id: user.peer_id,
+                muted: user.muted,
+                pfp: user.pfp || existingParticipant.pfp,
+                channel: channel
+            });
+        } else {
+            this._setParticipant(user.username, {
+                peer_id: user.peer_id,
+                muted: user.muted,
+                pfp: user.pfp || null,
+                speaking: false,
+                channel: channel
+            });
+        }
 
-        const isNotSelf = state.currentUser && user.username !== state.currentUser.username;
+        // Update channel voice_state to include new user
+        const channelData = state.channels.find(c => c.name === channel);
+        if (channelData && channelData.voice_state) {
+            const usernameLower = user.username.toLowerCase();
+            const alreadyInVoiceState = channelData.voice_state.some(v => v.username.toLowerCase() === usernameLower);
+            if (!alreadyInVoiceState) {
+                channelData.voice_state.push({
+                    username: user.username,
+                    peer_id: user.peer_id,
+                    muted: user.muted,
+                    pfp: user.pfp || null
+                });
+            }
+        }
+
+        const isNotSelf = state.currentUser && user.username.toLowerCase() !== state.currentUser.username.toLowerCase();
         if (channel === this.currentChannel && isNotSelf && user.peer_id) {
             this.connectToPeer(user.peer_id, user.username);
         }
 
         this.updateVoiceUI();
 
-        if (typeof renderChannels === 'function') {
-            renderChannels();
-        }
+        renderChannels()
     }
 
     handleUserLeft(data) {
@@ -298,90 +394,92 @@ class VoiceManager {
         console.log('[Voice] User left:', username, 'from channel:', channel);
 
         const usernameLower = username.toLowerCase();
-        let participantKey = null;
-        let participant = null;
-
-        for (const [key, value] of this.participants) {
-            if (value.username.toLowerCase() === usernameLower) {
-                participantKey = key;
-                participant = value;
-                break;
-            }
-        }
+        const participant = this._findParticipantByUsername(username);
 
         if (!participant) {
-            console.log('[Voice] Participant not found, using username as fallback');
-            participantKey = username;
-            participant = { peer_id: username };
-        }
+            console.log('[Voice] Participant not found:', username);
+        } else {
+            const peerId = participant.peer_id || username;
 
-        const peerId = participant.peer_id || username;
+            // Cancel animation frame
+            const frameId = this.speakingAnimationFrames.get(peerId);
+            if (frameId) {
+                cancelAnimationFrame(frameId);
+                this.speakingAnimationFrames.delete(peerId);
+            }
 
-        this.participants.delete(participantKey);
-
-        const analyzer = this.speakingDetectors.get(peerId);
-        if (analyzer) {
+            // Remove analyzer
             this.speakingDetectors.delete(peerId);
+
+            // Close and remove audio context
+            const audioContext = this.audioContexts.get(peerId);
+            if (audioContext && audioContext.close) {
+                audioContext.close();
+            }
+            this.audioContexts.delete(peerId);
+
+            // Close call
+            const call = this.calls.get(peerId);
+            if (call) {
+                call.close();
+                this.calls.delete(peerId);
+            }
+
+            // Close connection
+            const conn = this.connections.get(peerId);
+            if (conn) {
+                conn.close();
+                this.connections.delete(peerId);
+            }
+
+            // Remove from participants
+            this._deleteParticipant(username);
         }
 
-        const call = this.calls.get(peerId);
-        if (call) {
-            call.close();
-            this.calls.delete(peerId);
-        }
-
-        const conn = this.connections.get(peerId);
-        if (conn) {
-            conn.close();
-            this.connections.delete(peerId);
+        // Update channel voice_state
+        const channelData = state.channels.find(c => c.name === channel);
+        if (channelData && channelData.voice_state) {
+            channelData.voice_state = channelData.voice_state.filter(v =>
+                v.username.toLowerCase() !== usernameLower
+            );
         }
 
         this.updateVoiceUI();
 
-        if (typeof renderChannels === 'function') {
-            renderChannels();
-        }
+        renderChannels()
     }
 
     handleUserUpdated(data) {
         const { user, channel } = data;
         console.log('[Voice] User updated:', user.username, 'muted:', user.muted);
 
-        const usernameLower = user.username.toLowerCase();
-        let participantKey = null;
-        let participant = null;
-
-        for (const [key, value] of this.participants) {
-            if (value.username.toLowerCase() === usernameLower) {
-                participantKey = key;
-                participant = value;
-                break;
-            }
-        }
+        const participant = this._findParticipantByUsername(user.username);
 
         if (participant) {
-            participant.muted = user.muted;
-            if (user.pfp !== undefined) {
-                participant.pfp = user.pfp;
-            }
-            this.participants.set(participantKey, participant);
+            this._setParticipant(user.username, {
+                ...participant,
+                muted: user.muted,
+                pfp: user.pfp !== undefined ? user.pfp : participant.pfp
+            });
         }
 
+        // Update channel voice_state
         const channelData = state.channels.find(c => c.name === channel);
         if (channelData && channelData.voice_state) {
-            const voiceUserIndex = channelData.voice_state.findIndex(v => 
-                v.username.toLowerCase() === usernameLower
+            const voiceUserIndex = channelData.voice_state.findIndex(v =>
+                v.username.toLowerCase() === user.username.toLowerCase()
             );
             if (voiceUserIndex !== -1) {
                 channelData.voice_state[voiceUserIndex].muted = user.muted;
+                if (user.pfp !== undefined) {
+                    channelData.voice_state[voiceUserIndex].pfp = user.pfp;
+                }
             }
         }
 
         this.updateVoiceUI();
 
-        if (typeof renderChannels === 'function') {
-            renderChannels();
-        }
+        renderChannels()
     }
 
     async connectToPeer(peerId, username) {
@@ -458,44 +556,40 @@ class VoiceManager {
             source.connect(analyzer);
 
             const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-            let speakingTimeout = null;
+            let lastRenderTime = 0;
+            const RENDER_THROTTLE_MS = 100;
 
-            this.speakingDetectors.set(username, analyzer);
+            this.speakingDetectors.set(peerId, analyzer);
+            this.audioContexts.set(peerId, audioContext);
 
-            const checkSpeaking = () => {
+            const checkSpeaking = (timestamp) => {
                 analyzer.getByteFrequencyData(dataArray);
                 const average = (dataArray.reduce((a, b) => a + b, 0) / dataArray.length) * (100 / 255);
 
-                const usernameLower = username.toLowerCase();
-                let participantKey = null;
-                let participant = null;
-
-                for (const [key, value] of this.participants) {
-                    if (value.username.toLowerCase() === usernameLower) {
-                        participantKey = key;
-                        participant = value;
-                        break;
-                    }
-                }
+                const participant = this._findParticipantByUsername(username);
 
                 if (participant) {
                     const isSpeakingNow = average > this.micThreshold;
 
                     if (isSpeakingNow !== participant.speaking) {
-                        participant.speaking = isSpeakingNow;
-                        this.participants.set(participantKey, participant);
-                        this.updateVoiceUI();
+                        this._setParticipant(username, {
+                            ...participant,
+                            speaking: isSpeakingNow
+                        });
 
-                        if (typeof renderChannels === 'function') {
+                        if (typeof renderChannels === 'function' && timestamp - lastRenderTime > RENDER_THROTTLE_MS) {
+                            lastRenderTime = timestamp;
                             renderChannels();
                         }
                     }
                 }
 
-                requestAnimationFrame(checkSpeaking);
+                const frameId = requestAnimationFrame(checkSpeaking);
+                this.speakingAnimationFrames.set(peerId, frameId);
             };
 
-            checkSpeaking();
+            const frameId = requestAnimationFrame(checkSpeaking);
+            this.speakingAnimationFrames.set(peerId, frameId);
         } catch (error) {
             console.error('[Voice] Failed to setup speaking detection:', error);
         }
@@ -506,15 +600,10 @@ class VoiceManager {
         div.className = 'voice-participant-card';
         if (isSelf) div.classList.add('voice-self');
         if (userId) {
-            const usernameLower = userId.toLowerCase();
-            let speaking = false;
-            for (const [key, value] of this.participants) {
-                if (value.username.toLowerCase() === usernameLower) {
-                    speaking = value.speaking;
-                    break;
-                }
+            const participant = this._findParticipantByUsername(userId);
+            if (participant && participant.speaking) {
+                div.classList.add('speaking');
             }
-            if (speaking) div.classList.add('speaking');
         }
 
         const avatarContainer = document.createElement('div');
@@ -541,12 +630,9 @@ class VoiceManager {
         speakingIndicator.className = 'voice-speaking-indicator';
         let speaking = muted;
         if (!muted && userId) {
-            const usernameLower = userId.toLowerCase();
-            for (const [key, value] of this.participants) {
-                if (value.username.toLowerCase() === usernameLower) {
-                    speaking = !value.speaking;
-                    break;
-                }
+            const participant = this._findParticipantByUsername(userId);
+            if (participant) {
+                speaking = !participant.speaking;
             }
         }
         if (speaking) {
