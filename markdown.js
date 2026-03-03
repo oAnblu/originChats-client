@@ -1,6 +1,7 @@
 function replaceShortcodes(text) {
+    if (!window.shortcodeMap) return text;
     return text.replace(/:[a-z0-9_]+:|/g, match => {
-        return shortcodeMap[match] || match;
+        return window.shortcodeMap[match] || match;
     });
 }
 

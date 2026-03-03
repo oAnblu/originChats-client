@@ -55,7 +55,8 @@ function getChannelsToRender() {
         channels.push(
             { name: 'home', type: 'home' },
             { name: 'relationships', type: 'relationships' },
-            { name: 'new_message', type: 'new_message' }
+            { name: 'notes', type: 'text', display_name: 'Notes' },
+            { name: 'new_message', type: 'new_message', display_name: 'New Message' }
         );
     }
 

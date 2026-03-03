@@ -8,10 +8,20 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>originChats</title>
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://api.rotur.dev">
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="https://api.rotur.dev">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="settings.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link rel="preload" href="settings.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="settings.css"></noscript>
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"></noscript>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" defer></script>
 </head>
 
 <body>
@@ -27,10 +37,6 @@
                     </div>
                     <div id="channel-name" class="channel-name">#home</div>
                 </div>
-                <button class="server-settings-btn" id="server-settings-btn" onclick="openServerSettings()"
-                    title="Server Settings" style="display: none;">
-                    <i data-lucide="settings-2"></i>
-                </button>
             </div>
         </div>
         <div class="overlay" onclick="closeMenu()"></div>
@@ -62,7 +68,8 @@
                     <div class="channel-header-info">
                         <div class="channel-header-name" id="channel-header-name">Server Name</div>
                     </div>
-                    <button class="server-settings-btn" id="server-settings-btn" onclick="openServerSettings()" title="Server Settings">
+                    <button class="server-settings-btn" id="server-settings-btn" onclick="openServerSettings()"
+                        title="Server Settings">
                         <i data-lucide="settings-2"></i>
                     </button>
                 </div>
@@ -226,356 +233,366 @@
             </div>
         </div>
     </div>
+    </div>
 
-    <div id="settings-modal" class="settings-panel">
-        <div class="settings-overlay" onclick="closeSettings()"></div>
-        <div class="settings-container">
-            <button class="settings-close" onclick="closeSettings()">
+    <div id="settings-modal" class="modal-overlay settings-modal" onclick="if(event.target === this) closeSettings()"
+        style="display: none;">
+        <div class="modal-container">
+            <button class="modal-close-btn" onclick="closeSettings()">
                 <i data-lucide="x"></i>
             </button>
-            <div class="settings-sidebar">
-                <div class="settings-nav">
-                    <div class="nav-item active" data-section="media-servers">
-                        <div class="nav-item-icon">
-                            <i data-lucide="server"></i>
-                        </div>
-                        <div class="nav-item-label">Media Servers</div>
-                    </div>
-                    <div class="nav-item" data-section="voice">
-                        <div class="nav-item-icon">
-                            <i data-lucide="mic"></i>
-                        </div>
-                        <div class="nav-item-label">Voice</div>
-                    </div>
-                    <div class="nav-item" data-section="privacy">
-                        <div class="nav-item-icon">
-                            <i data-lucide="shield"></i>
-                        </div>
-                        <div class="nav-item-label">Privacy</div>
-                    </div>
-                    <div class="nav-item" data-section="chat">
-                        <div class="nav-item-icon">
-                            <i data-lucide="message-circle"></i>
-                        </div>
-                        <div class="nav-item-label">Chat</div>
-                    </div>
-                    <div class="nav-item" data-section="appearance">
-                        <div class="nav-item-icon">
-                            <i data-lucide="palette"></i>
-                        </div>
-                        <div class="nav-item-label">Appearance</div>
-                    </div>
-                </div>
-            </div>
-            <div class="settings-content">
-                <div id="section-media-servers" class="settings-section active">
-                    <div class="section-header">
-                        <h2>Media Servers</h2>
-                        <p>Configure where your images and media files are uploaded.</p>
-                    </div>
-                    <div class="card">
-                        <button class="btn btn-primary" onclick="openAddServerModal()">
-                            <i data-lucide="plus"></i>
-                            Add Server
-                        </button>
-                    </div>
-                    <div id="media-servers-list"></div>
-                </div>
-                <div id="section-voice" class="settings-section">
-                    <div class="section-header">
-                        <h2>Voice Settings</h2>
-                        <p>Configure your voice and microphone settings.</p>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="mic"></i>Microphone Sensitivity</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Adjust when your microphone activates. Lower values make it more
-                                sensitive (activates on quieter sounds).</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <label
-                                    style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px; display: block;">Activation
-                                    Threshold: <span id="mic-threshold-value">30</span></label>
-                                <input type="range" id="mic-threshold-slider" min="0" max="100" value="30"
-                                    style="width: 100%; accent-color: var(--primary);">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="section-privacy" class="settings-section">
-                    <div class="section-header">
-                        <h2>Privacy</h2>
-                        <p>Configure your privacy and blocked user settings.</p>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="shield"></i>Blocked Messages</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Choose how messages from blocked users should appear in chat.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <select id="blocked-messages-mode" class="setting-input">
-                                    <option value="hide">Hide completely</option>
-                                    <option value="dim">Dim messages</option>
-                                    <option value="collapse">Collapse with reveal button</option>
-                                </select>
-                            </div>
-                            <div id="blocked-mode-preview"
-                                style="margin-top: 12px; padding: 12px; background: var(--surface); border-radius: 8px; border: 1px solid var(--border);">
-                                <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">Preview:</div>
-                                <div id="preview-content" style="font-size: 13px;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="section-chat" class="settings-section">
-                    <div class="section-header">
-                        <h2>Chat</h2>
-                        <p>Customize your chat experience and behavior.</p>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="type"></i>Font Size</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Adjust the size of text in chat messages.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <label
-                                    style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px; display: block;">Font
-                                    Size: <span id="font-size-value">15px</span></label>
-                                <input type="range" id="font-size-slider" min="12" max="20" value="15"
-                                    style="width: 100%; accent-color: var(--primary);">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="toggle-left"></i>Embeds</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Control how link embeds are displayed in chat.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="show-embeds" checked
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Show link embeds</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="clock"></i>Timestamps</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Configure timestamp display options.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="show-timestamps" checked
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Show timestamps</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div id="section-appearance" class="settings-section">
-                    <div class="section-header">
-                        <h2>Appearance</h2>
-                        <p>Customize the look and feel of the client.</p>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="palette"></i>Color Theme</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Choose a color theme for the interface.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <select id="color-theme-select" class="setting-input">
-                                    <option value="dark">Default Dark</option>
-                                    <option value="midnight">Midnight</option>
-                                    <option value="ocean">Ocean</option>
-                                    <option value="forest">Forest</option>
-                                    <option value="sunset">Sunset</option>
-                                    <option value="purple">Purple Haze</option>
-                                    <option value="rose">Rose</option>
-                                    <option value="amber">Amber</option>
-                                    <option value="cyan">Cyan</option>
-                                    <option value="emerald">Emerald</option>
-                                </select>
-                            </div>
-                            <div id="theme-preview" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
-                                <div class="theme-preview-option" data-theme="dark"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a0a0c, #141419); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+            <div class="modal-content">
+                <div class="settings-container">
+                    <div class="settings-sidebar">
+                        <div class="settings-nav">
+                            <div class="nav-item active" data-section="media-servers">
+                                <div class="nav-item-icon">
+                                    <i data-lucide="server"></i>
                                 </div>
-                                <div class="theme-preview-option" data-theme="midnight"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0d1117, #161b22); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                <div class="nav-item-label">Media Servers</div>
+                            </div>
+                            <div class="nav-item" data-section="voice">
+                                <div class="nav-item-icon">
+                                    <i data-lucide="mic"></i>
                                 </div>
-                                <div class="theme-preview-option" data-theme="ocean"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a1628, #122a45); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                <div class="nav-item-label">Voice</div>
+                            </div>
+                            <div class="nav-item" data-section="privacy">
+                                <div class="nav-item-icon">
+                                    <i data-lucide="shield"></i>
                                 </div>
-                                <div class="theme-preview-option" data-theme="forest"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a1a10, #143d1f); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                <div class="nav-item-label">Privacy</div>
+                            </div>
+                            <div class="nav-item" data-section="chat">
+                                <div class="nav-item-icon">
+                                    <i data-lucide="message-circle"></i>
                                 </div>
-                                <div class="theme-preview-option" data-theme="sunset"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #1a0a14, #3d1420); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                <div class="nav-item-label">Chat</div>
+                            </div>
+                            <div class="nav-item" data-section="appearance">
+                                <div class="nav-item-icon">
+                                    <i data-lucide="palette"></i>
                                 </div>
-                                <div class="theme-preview-option" data-theme="purple"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #1a0a28, #3d1455); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
-                                </div>
-                                <div class="theme-preview-option" data-theme="rose"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #1a0a1a, #3d1414); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
-                                </div>
-                                <div class="theme-preview-option" data-theme="amber"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #1a140a, #3d2814); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
-                                </div>
-                                <div class="theme-preview-option" data-theme="cyan"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a141a, #14283d); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
-                                </div>
-                                <div class="theme-preview-option" data-theme="emerald"
-                                    style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a1a14, #143d28); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
-                                </div>
+                                <div class="nav-item-label">Appearance</div>
                             </div>
                         </div>
                     </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="square"></i>Border Radius</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Adjust the roundness of interface elements.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <label
-                                    style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px; display: block;">Border
-                                    Radius: <span id="border-radius-value">12px</span></label>
-                                <input type="range" id="border-radius-slider" min="0" max="24" value="12"
-                                    style="width: 100%; accent-color: var(--primary);">
+                    <div class="settings-content">
+                        <div id="section-media-servers" class="settings-section active">
+                            <div class="section-header">
+                                <h2>Media Servers</h2>
+                                <p>Configure where your images and media files are uploaded.</p>
                             </div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="layers"></i>Message Grouping</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Group consecutive messages from the same user.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="message-grouping" checked
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Group messages</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="type"></i>Font Family</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Choose the font family for the interface.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <select id="font-family-select" class="setting-input">
-                                    <option value="system">System Default</option>
-                                    <option value="geometric">Geometric Sans</option>
-                                    <option value="humanist">Humanistic</option>
-                                    <option value="mono">Monospace</option>
-                                    <option value="serif">Serif</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="image"></i>Chat Wallpaper</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Set a custom background image for the chat area.</p>
-                            <div style="width: 100%; margin-top: 12px;">
-                                <input type="file" id="wallpaper-upload" accept="image/*" style="display: none;">
-                                <button class="btn btn-secondary"
-                                    onclick="document.getElementById('wallpaper-upload').click()"
-                                    style="width: 100%; margin-bottom: 8px;">
-                                    <i data-lucide="upload" style="width: 16px; height: 16px;"></i>
-                                    Upload Wallpaper
+                            <div class="card">
+                                <button class="btn btn-primary" onclick="openAddServerModal()">
+                                    <i data-lucide="plus"></i>
+                                    Add Server
                                 </button>
-                                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                    <button class="btn btn-secondary" id="clear-wallpaper-btn"
-                                        style="flex: 1; min-width: 80px;">
-                                        <i data-lucide="x" style="width: 16px; height: 16px;"></i>
-                                        Clear
-                                    </button>
-                                    <label
-                                        style="display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--surface-light); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); flex: 1; min-width: 120px;">
-                                        <input type="checkbox" id="wallpaper-opacity"
-                                            style="width: 16px; height: 16px; accent-color: var(--primary);">
-                                        <span style="font-size: 13px;">Dim wallpaper</span>
-                                    </label>
-                                    <div
-                                        style="flex: 1; min-width: 120px; background: var(--surface-light); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);">
+                            </div>
+                            <div id="media-servers-list"></div>
+                        </div>
+                        <div id="section-voice" class="settings-section">
+                            <div class="section-header">
+                                <h2>Voice Settings</h2>
+                                <p>Configure your voice and microphone settings.</p>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="mic"></i>Microphone Sensitivity</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Adjust when your microphone activates. Lower values make it
+                                        more
+                                        sensitive (activates on quieter sounds).</p>
+                                    <div style="width: 100%; margin-top: 12px;">
                                         <label
-                                            style="font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 4px;">Opacity:
-                                            <span id="wallpaper-opacity-value">100%</span></label>
-                                        <input type="range" id="wallpaper-opacity-slider" min="10" max="100" value="100"
+                                            style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px; display: block;">Activation
+                                            Threshold: <span id="mic-threshold-value">30</span></label>
+                                        <input type="range" id="mic-threshold-slider" min="0" max="100" value="30"
                                             style="width: 100%; accent-color: var(--primary);">
                                     </div>
                                 </div>
                             </div>
-                            <div id="wallpaper-preview"
-                                style="margin-top: 12px; height: 120px; border-radius: 8px; border: 2px solid var(--border); background-size: cover; background-position: center; display: none;">
+                        </div>
+                        <div id="section-privacy" class="settings-section">
+                            <div class="section-header">
+                                <h2>Privacy</h2>
+                                <p>Configure your privacy and blocked user settings.</p>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="shield"></i>Blocked Messages</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Choose how messages from blocked users should appear in
+                                        chat.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <select id="blocked-messages-mode" class="setting-input">
+                                            <option value="hide">Hide completely</option>
+                                            <option value="dim">Dim messages</option>
+                                            <option value="collapse">Collapse with reveal button</option>
+                                        </select>
+                                    </div>
+                                    <div id="blocked-mode-preview"
+                                        style="margin-top: 12px; padding: 12px; background: var(--surface); border-radius: 8px; border: 1px solid var(--border);">
+                                        <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 8px;">
+                                            Preview:</div>
+                                        <div id="preview-content" style="font-size: 13px;"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="activity"></i>Animations</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Configure animation preferences.</p>
-                            <div
-                                style="width: 100%; margin-top: 12px; display: flex; flex-direction: column; gap: 12px;">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="enable-animations" checked
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Enable animations</span>
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="gif-autoplay" checked
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Autoplay GIFs</span>
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="reduce-motion"
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Reduce motion (accessibility)</span>
-                                </label>
+                        <div id="section-chat" class="settings-section">
+                            <div class="section-header">
+                                <h2>Chat</h2>
+                                <p>Customize your chat experience and behavior.</p>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="type"></i>Font Size</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Adjust the size of text in chat messages.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <label
+                                            style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px; display: block;">Font
+                                            Size: <span id="font-size-value">15px</span></label>
+                                        <input type="range" id="font-size-slider" min="12" max="20" value="15"
+                                            style="width: 100%; accent-color: var(--primary);">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="toggle-left"></i>Embeds</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Control how link embeds are displayed in chat.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="show-embeds" checked
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Show link embeds</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="clock"></i>Timestamps</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Configure timestamp display options.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="show-timestamps" checked
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Show timestamps</span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="card">
-                        <div class="setting-card-header">
-                            <h3><i data-lucide="sidebar"></i>UI Elements</h3>
-                        </div>
-                        <div class="setting-card-body">
-                            <p class="setting-hint">Toggle visibility of various UI elements.</p>
-                            <div
-                                style="width: 100%; margin-top: 12px; display: flex; flex-direction: column; gap: 12px;">
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="show-scrollbars" checked
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Show scrollbars</span>
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="show-avatar-borders" checked
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Show avatar borders</span>
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="show-message-shadows" checked
-                                        style="width: 18px; height: 18px; accent-color: var(--primary);">
-                                    <span style="font-size: 14px;">Show message hover effects</span>
-                                </label>
+                        <div id="section-appearance" class="settings-section">
+                            <div class="section-header">
+                                <h2>Appearance</h2>
+                                <p>Customize the look and feel of the client.</p>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="palette"></i>Color Theme</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Choose a color theme for the interface.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <select id="color-theme-select" class="setting-input">
+                                            <option value="dark">Default Dark</option>
+                                            <option value="midnight">Midnight</option>
+                                            <option value="ocean">Ocean</option>
+                                            <option value="forest">Forest</option>
+                                            <option value="sunset">Sunset</option>
+                                            <option value="purple">Purple Haze</option>
+                                            <option value="rose">Rose</option>
+                                            <option value="amber">Amber</option>
+                                            <option value="cyan">Cyan</option>
+                                            <option value="emerald">Emerald</option>
+                                        </select>
+                                    </div>
+                                    <div id="theme-preview"
+                                        style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                                        <div class="theme-preview-option" data-theme="dark"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a0a0c, #141419); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="midnight"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0d1117, #161b22); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="ocean"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a1628, #122a45); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="forest"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a1a10, #143d1f); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="sunset"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #1a0a14, #3d1420); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="purple"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #1a0a28, #3d1455); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="rose"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #1a0a1a, #3d1414); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="amber"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #1a140a, #3d2814); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="cyan"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a141a, #14283d); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                        <div class="theme-preview-option" data-theme="emerald"
+                                            style="flex: 1; min-width: 80px; height: 56px; border-radius: 8px; background: linear-gradient(135deg, #0a1a14, #143d28); border: 2px solid transparent; cursor: pointer; transition: all 0.2s ease;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="square"></i>Border Radius</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Adjust the roundness of interface elements.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <label
+                                            style="font-size: 13px; color: var(--text-dim); margin-bottom: 8px; display: block;">Border
+                                            Radius: <span id="border-radius-value">12px</span></label>
+                                        <input type="range" id="border-radius-slider" min="0" max="24" value="12"
+                                            style="width: 100%; accent-color: var(--primary);">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="layers"></i>Message Grouping</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Group consecutive messages from the same user.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="message-grouping" checked
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Group messages</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="type"></i>Font Family</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Choose the font family for the interface.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <select id="font-family-select" class="setting-input">
+                                            <option value="system">System Default</option>
+                                            <option value="geometric">Geometric Sans</option>
+                                            <option value="humanist">Humanistic</option>
+                                            <option value="mono">Monospace</option>
+                                            <option value="serif">Serif</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="image"></i>Chat Wallpaper</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Set a custom background image for the chat area.</p>
+                                    <div style="width: 100%; margin-top: 12px;">
+                                        <input type="file" id="wallpaper-upload" accept="image/*"
+                                            style="display: none;">
+                                        <button class="btn btn-secondary"
+                                            onclick="document.getElementById('wallpaper-upload').click()"
+                                            style="width: 100%; margin-bottom: 8px;">
+                                            <i data-lucide="upload" style="width: 16px; height: 16px;"></i>
+                                            Upload Wallpaper
+                                        </button>
+                                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                            <button class="btn btn-secondary" id="clear-wallpaper-btn"
+                                                style="flex: 1; min-width: 80px;">
+                                                <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+                                                Clear
+                                            </button>
+                                            <label
+                                                style="display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--surface-light); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); flex: 1; min-width: 120px;">
+                                                <input type="checkbox" id="wallpaper-opacity"
+                                                    style="width: 16px; height: 16px; accent-color: var(--primary);">
+                                                <span style="font-size: 13px;">Dim wallpaper</span>
+                                            </label>
+                                            <div
+                                                style="flex: 1; min-width: 120px; background: var(--surface-light); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);">
+                                                <label
+                                                    style="font-size: 11px; color: var(--text-dim); display: block; margin-bottom: 4px;">Opacity:
+                                                    <span id="wallpaper-opacity-value">100%</span></label>
+                                                <input type="range" id="wallpaper-opacity-slider" min="10" max="100"
+                                                    value="100" style="width: 100%; accent-color: var(--primary);">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="wallpaper-preview"
+                                        style="margin-top: 12px; height: 120px; border-radius: 8px; border: 2px solid var(--border); background-size: cover; background-position: center; display: none;">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="activity"></i>Animations</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Configure animation preferences.</p>
+                                    <div
+                                        style="width: 100%; margin-top: 12px; display: flex; flex-direction: column; gap: 12px;">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="enable-animations" checked
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Enable animations</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="gif-autoplay" checked
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Autoplay GIFs</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="reduce-motion"
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Reduce motion (accessibility)</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="setting-card-header">
+                                    <h3><i data-lucide="sidebar"></i>UI Elements</h3>
+                                </div>
+                                <div class="setting-card-body">
+                                    <p class="setting-hint">Toggle visibility of various UI elements.</p>
+                                    <div
+                                        style="width: 100%; margin-top: 12px; display: flex; flex-direction: column; gap: 12px;">
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="show-scrollbars" checked
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Show scrollbars</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="show-avatar-borders" checked
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Show avatar borders</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                            <input type="checkbox" id="show-message-shadows" checked
+                                                style="width: 18px; height: 18px; accent-color: var(--primary);">
+                                            <span style="font-size: 14px;">Show message hover effects</span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -649,7 +666,8 @@
                         <div class="form-group">
                             <label class="form-label">Response URL Path</label>
                             <input type="text" class="setting-input" name="responseUrlPath" placeholder="$.data.link">
-                            <small class="setting-hint">JSON path to URL or ID in response. Use $. for root.</small>
+                            <small class="setting-hint">JSON path to URL or ID in response. Use $. for
+                                root.</small>
                         </div>
                         <div class="form-group">
                             <label class="form-label">URL Template</label>
@@ -707,14 +725,23 @@
         </div>
     </div>
 
-    <div id="server-settings-modal" class="modal-overlay" onclick="if(event.target === this) closeServerSettings()"
-        style="display: none;">
+    <div id="server-settings-modal" class="modal-overlay server-settings-modal"
+        onclick="if(event.target === this) closeServerSettings()" style="display: none;">
         <div class="modal-container">
-            <button class="modal-close-btn" onclick="closeServerSettings()">
-                <i data-lucide="x"></i>
-            </button>
+            <div class="modal-close-btn-wrapper">
+                <button class="modal-close-btn" onclick="closeServerSettings()">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
             <div class="modal-content">
                 <div class="server-settings-content">
+                    <div class="server-settings-header">
+                        <div class="server-settings-icon" id="server-settings-icon"></div>
+                        <div class="server-settings-title">
+                            <h3 id="server-settings-name">Server Settings</h3>
+                            <span class="server-settings-subtitle" id="server-settings-url"></span>
+                        </div>
+                    </div>
                     <div class="server-settings-body">
                         <div class="server-settings-sidebar">
                             <div class="server-settings-nav">
@@ -741,194 +768,202 @@
                                 <div class="server-section-header">
                                     <h2>Overview</h2>
                                 </div>
-                            <div class="server-section-content">
-                                <div class="info-card">
-                                    <h3>Server Information</h3>
-                                    <div class="info-row">
-                                        <span class="info-label">Server Name</span>
-                                        <span id="overview-server-name" class="info-value">-</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Server URL</span>
-                                        <span id="overview-server-url" class="info-value">-</span>
-                                    </div>
-                                    <div class="info-row">
-                                        <span class="info-label">Your Role</span>
-                                        <span id="overview-user-role" class="info-value">-</span>
+                                <div class="server-section-content">
+                                    <div class="info-card">
+                                        <h3>Server Information</h3>
+                                        <div class="info-row">
+                                            <span class="info-label">Server Name</span>
+                                            <span id="overview-server-name" class="info-value">-</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Server URL</span>
+                                            <span id="overview-server-url" class="info-value">-</span>
+                                        </div>
+                                        <div class="info-row">
+                                            <span class="info-label">Your Role</span>
+                                            <span id="overview-user-role" class="info-value">-</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div id="server-section-roles" class="server-section">
-                            <div class="server-section-header">
-                                <h2>Roles</h2>
-                                <button class="btn btn-primary" onclick="openCreateRoleModal()">
-                                    <i data-lucide="plus"></i>
-                                    Create Role
-                                </button>
-                            </div>
-                            <div class="server-section-content">
-                                <div id="roles-list" class="roles-list"></div>
-                            </div>
-                        </div>
-                        <div id="server-section-channels" class="server-section">
-                            <div class="server-section-header">
-                                <h2>Channels</h2>
-                                <button class="btn btn-primary" onclick="openCreateChannelModal()">
-                                    <i data-lucide="plus"></i>
-                                    Create Channel
-                                </button>
-                            </div>
-                            <div class="server-section-content">
-                                <div id="channels-management-list" class="channels-management-list"></div>
-                            </div>
-                        </div>
-                        <div id="server-section-members" class="server-section">
-                            <div class="server-section-header">
-                                <h2>Members</h2>
-                            </div>
-                            <div class="server-section-content">
-                                <div class="members-search">
-                                    <input type="text" id="members-search-input" placeholder="Search members..."
-                                        class="setting-input">
+                            <div id="server-section-roles" class="server-section">
+                                <div class="server-section-header">
+                                    <h2>Roles</h2>
+                                    <button class="btn btn-primary" onclick="openCreateRoleModal()">
+                                        <i data-lucide="plus"></i>
+                                        Create Role
+                                    </button>
                                 </div>
-                                <div id="members-list-container" class="members-list-container"></div>
+                                <div class="server-section-content">
+                                    <div id="roles-list" class="roles-list"></div>
+                                </div>
+                            </div>
+                            <div id="server-section-channels" class="server-section">
+                                <div class="server-section-header">
+                                    <h2>Channels</h2>
+                                    <button class="btn btn-primary" onclick="openCreateChannelModal()">
+                                        <i data-lucide="plus"></i>
+                                        Create Channel
+                                    </button>
+                                </div>
+                                <div class="server-section-content">
+                                    <div id="channels-management-list" class="channels-management-list"></div>
+                                </div>
+                            </div>
+                            <div id="server-section-members" class="server-section">
+                                <div class="server-section-header">
+                                    <h2>Members</h2>
+                                </div>
+                                <div class="server-section-content">
+                                    <div class="members-search">
+                                        <input type="text" id="members-search-input" placeholder="Search members..."
+                                            class="setting-input">
+                                    </div>
+                                    <div id="members-list-container" class="members-list-container"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <div id="create-channel-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-container">
-            <button class="modal-close-btn" onclick="closeCreateChannelModal()">
-                <i data-lucide="x"></i>
-            </button>
-            <div class="modal-content">
-                <h2 id="channel-modal-title">Create Channel</h2>
-                <form id="channel-form" class="server-config-form">
-                    <input type="hidden" id="channel-current-name">
-                    <div class="form-group">
-                        <label class="form-label">Channel Type</label>
-                        <select id="channel-type" class="setting-input" onchange="updateChannelTypeFields()">
-                            <option value="text">Text</option>
-                            <option value="voice">Voice</option>
-                            <option value="separator">Separator</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="channel-name-group">
-                        <label class="form-label">Channel Name</label>
-                        <input type="text" id="channel-name" class="setting-input" placeholder="channel-name"
-                            autocomplete="off">
-                    </div>
-                    <div class="form-group" id="channel-description-group">
-                        <label class="form-label">Description</label>
-                        <input type="text" id="channel-description" class="setting-input"
-                            placeholder="Channel description..." autocomplete="off">
-                    </div>
-                    <div class="form-group" id="channel-wallpaper-group">
-                        <label class="form-label">Wallpaper URL</label>
-                        <input type="url" id="channel-wallpaper" class="setting-input"
-                            placeholder="https://example.com/image.png" autocomplete="off">
-                    </div>
-                    <div class="form-group" id="channel-size-group" style="display: none;">
-                        <label class="form-label">Separator Size (px)</label>
-                        <input type="number" id="channel-size" class="setting-input" placeholder="10" value="10" min="1"
-                            max="100">
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary"
-                            onclick="closeCreateChannelModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary" id="channel-submit-btn">Create</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div id="create-role-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-container">
-            <button class="modal-close-btn" onclick="closeCreateRoleModal()">
-                <i data-lucide="x"></i>
-            </button>
-            <div class="modal-content">
-                <h2 id="role-modal-title">Create Role</h2>
-                <form id="role-form" class="server-config-form">
-                    <input type="hidden" id="role-current-name">
-                    <div class="form-group">
-                        <label class="form-label">Role Name</label>
-                        <input type="text" id="role-name" class="setting-input" placeholder="role-name"
-                            autocomplete="off">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Description</label>
-                        <input type="text" id="role-description" class="setting-input"
-                            placeholder="Optional role description..." autocomplete="off">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Color</label>
-                        <div class="color-picker-wrapper">
-                            <input type="color" id="role-color" class="color-picker" value="#5865F2">
-                            <input type="text" id="role-color-text" class="setting-input" placeholder="#5865F2"
-                                value="#5865F2" maxlength="7">
+        <div id="create-channel-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-container">
+                <button class="modal-close-btn" onclick="closeCreateChannelModal()">
+                    <i data-lucide="x"></i>
+                </button>
+                <div class="modal-content">
+                    <h2 id="channel-modal-title">Create Channel</h2>
+                    <form id="channel-form" class="server-config-form">
+                        <input type="hidden" id="channel-current-name">
+                        <div class="form-group">
+                            <label class="form-label">Channel Type</label>
+                            <select id="channel-type" class="setting-input" onchange="updateChannelTypeFields()">
+                                <option value="text">Text</option>
+                                <option value="voice">Voice</option>
+                                <option value="separator">Separator</option>
+                            </select>
                         </div>
+                        <div class="form-group" id="channel-name-group">
+                            <label class="form-label">Channel Name</label>
+                            <input type="text" id="channel-name" class="setting-input" placeholder="channel-name"
+                                autocomplete="off">
+                        </div>
+                        <div class="form-group" id="channel-description-group">
+                            <label class="form-label">Description</label>
+                            <input type="text" id="channel-description" class="setting-input"
+                                placeholder="Channel description..." autocomplete="off">
+                        </div>
+                        <div class="form-group" id="channel-wallpaper-group">
+                            <label class="form-label">Wallpaper URL</label>
+                            <input type="url" id="channel-wallpaper" class="setting-input"
+                                placeholder="https://example.com/image.png" autocomplete="off">
+                        </div>
+                        <div class="form-group" id="channel-size-group" style="display: none;">
+                            <label class="form-label">Separator Size (px)</label>
+                            <input type="number" id="channel-size" class="setting-input" placeholder="10" value="10"
+                                min="1" max="100">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary"
+                                onclick="closeCreateChannelModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="channel-submit-btn">Create</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="create-role-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-container">
+                <button class="modal-close-btn" onclick="closeCreateRoleModal()">
+                    <i data-lucide="x"></i>
+                </button>
+                <div class="modal-content">
+                    <h2 id="role-modal-title">Create Role</h2>
+                    <form id="role-form" class="server-config-form">
+                        <input type="hidden" id="role-current-name">
+                        <div class="form-group">
+                            <label class="form-label">Role Name</label>
+                            <input type="text" id="role-name" class="setting-input" placeholder="role-name"
+                                autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description</label>
+                            <input type="text" id="role-description" class="setting-input"
+                                placeholder="Optional role description..." autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Color</label>
+                            <div class="color-picker-wrapper">
+                                <input type="color" id="role-color" class="color-picker" value="#5865F2">
+                                <input type="text" id="role-color-text" class="setting-input" placeholder="#5865F2"
+                                    value="#5865F2" maxlength="7">
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary"
+                                onclick="closeCreateRoleModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="role-submit-btn">Create</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="member-roles-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-container">
+                <button class="modal-close-btn" onclick="closeMemberRolesModal()">
+                    <i data-lucide="x"></i>
+                </button>
+                <div class="modal-content">
+                    <h2 id="member-roles-title">Manage Member Roles</h2>
+                    <div class="member-info" id="member-info-display"></div>
+                    <div class="roles-assignment">
+                        <div id="available-roles-list" class="available-roles-list"></div>
                     </div>
                     <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" onclick="closeCreateRoleModal()">Cancel</button>
-                        <button type="submit" class="btn btn-primary" id="role-submit-btn">Create</button>
+                        <button type="button" class="btn btn-secondary" onclick="closeMemberRolesModal()">Close</button>
+                        <button type="button" class="btn btn-primary" onclick="saveMemberRoles()">Save
+                            Changes</button>
                     </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div id="member-roles-modal" class="modal-overlay" style="display: none;">
-        <div class="modal-container">
-            <button class="modal-close-btn" onclick="closeMemberRolesModal()">
-                <i data-lucide="x"></i>
-            </button>
-            <div class="modal-content">
-                <h2 id="member-roles-title">Manage Member Roles</h2>
-                <div class="member-info" id="member-info-display"></div>
-                <div class="roles-assignment">
-                    <div id="available-roles-list" class="available-roles-list"></div>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeMemberRolesModal()">Close</button>
-                    <button type="button" class="btn btn-primary" onclick="saveMemberRoles()">Save Changes</button>
                 </div>
             </div>
         </div>
-    </div>
 
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.3.0/dist/purify.min.js"></script>
+        <script src="https://unpkg.com/lucide@latest" defer></script>
+        <script src="https://cdn.jsdelivr.net/npm/dompurify@3.3.0/dist/purify.min.js" defer></script>
 
-    <!-- App modules -->
-    <script src="originFSKit.js"></script>
-    <script src="utils.js"></script>
-    <script src="embeds.js"></script>
-    <script src="markdown.js"></script>
-    <script src="interactions.js"></script>
-    <script src="uploads.js"></script>
-    <script src="channels.js"></script>
-    <script src="voice.js"></script>
-    <script src="script.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
-    <script src="serverSettings.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-    <script>
-        const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-        const isMobileDevice = window.innerWidth <= 768;
-        if (isLocalhost || isMobileDevice) {
-            eruda.init();
-        }
-    </script>
+        <!-- App modules -->
+        <script src="originFSKit.js" defer></script>
+        <script src="utils.js" defer></script>
+        <script src="embeds.js" defer></script>
+        <script src="markdown.js" defer></script>
+        <script src="interactions.js" defer></script>
+        <script src="uploads.js" defer></script>
+        <script src="notes-channel.js" defer></script>
+        <script src="channels.js" defer></script>
+        <script src="voice.js" defer></script>
+        <script src="script.js" defer></script>
+        <script src="serverSettings.js" defer></script>
+
+        <!-- Highlight.js with auto-detection -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js" defer></script>
+
+        <!-- Eruda debugger (only load on localhost, not mobile for performance) -->
+        <script>
+            const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            if (isLocalhost) {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/eruda';
+                script.onload = () => eruda.init();
+                document.head.appendChild(script);
+            }
+        </script>
 </body>
 
 </html>

@@ -71,13 +71,35 @@ function loadServerOverview() {
     const serverName = document.getElementById('overview-server-name');
     const serverUrl = document.getElementById('overview-server-url');
     const userRole = document.getElementById('overview-user-role');
+    const headerName = document.getElementById('server-settings-name');
+    const headerUrl = document.getElementById('server-settings-url');
+    const headerIcon = document.getElementById('server-settings-icon');
     
     const currentServer = state.servers.find(s => s.url === state.serverUrl);
+    const displayName = (currentServer && currentServer.name) ? currentServer.name : (state.serverUrl || 'Server Settings');
+
     if (currentServer) {
         serverName.textContent = currentServer.name || '-';
     }
     
     serverUrl.textContent = state.serverUrl || '-';
+    if (headerName) {
+        headerName.textContent = displayName;
+    }
+    if (headerUrl) {
+        headerUrl.textContent = state.serverUrl || '';
+    }
+    if (headerIcon) {
+        headerIcon.innerHTML = '';
+        if (currentServer && currentServer.icon) {
+            const img = document.createElement('img');
+            img.src = currentServer.icon;
+            img.alt = displayName;
+            headerIcon.appendChild(img);
+        } else {
+            headerIcon.textContent = displayName.charAt(0).toUpperCase();
+        }
+    }
     
     if (state.currentUser && state.currentUser.roles) {
         const roles = state.currentUser.roles;
@@ -308,6 +330,22 @@ function setupServerSettingsEventListeners() {
             if (hex) {
                 roleColorInput.value = e.target.value;
             }
+        });
+    }
+    
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const serverSettingsModal = document.getElementById('server-settings-modal');
+            if (serverSettingsModal && serverSettingsModal.style.display !== 'none') {
+                closeServerSettings();
+            }
+        }
+    });
+    
+    const closeBtn = document.querySelector('.modal-close-btn-wrapper');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
         });
     }
 }

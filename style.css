@@ -142,23 +142,6 @@ p {
     cursor: not-allowed;
 }
 
-.server-input {
-    width: 100%;
-    max-width: 400px;
-    padding: 15px;
-    background: var(--surface);
-    border: 2px solid var(--border);
-    border-radius: var(--border-radius, 12px);
-    color: var(--text);
-    font-size: 16px;
-    margin-bottom: 15px;
-    transition: border-color 0.3s ease, border-radius 0.2s ease;
-}
-
-.server-input:focus {
-    outline: none;
-    border-color: var(--primary);
-}
 
 #chat-screen {
     flex-direction: column;
@@ -189,9 +172,6 @@ p {
     padding: 8px;
 }
 
-.server-icon {
-    display: none;
-}
 
 .header-text {
     flex: 1;
@@ -205,13 +185,7 @@ p {
     gap: 5px;
 }
 
-.dropdown-arrow {
-    display: none;
-}
 
-.server-dropdown {
-    display: none;
-}
 
 .channel-name {
     font-size: 14px;
@@ -659,13 +633,10 @@ p {
     flex-direction: column;
     gap: 0px;
     overscroll-behavior-y: contain;
-    /* background-color: var(--surface); */
-    /* border-radius: 1.5rem; */
 }
 
 .messages::before {
     content: '';
-    flex: 1;
     min-height: 0;
 }
 
@@ -1189,32 +1160,47 @@ a {
     }
 }
 
-.modal-close-btn {
+.modal-close-btn-wrapper {
     position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 32px;
-    height: 32px;
+    top: 0;
+    right: 0;
+    z-index: 20;
+}
+
+.modal-close-btn {
+    position: relative;
+    top: 0;
+    right: 0;
+    margin: 0;
+    width: 40px;
+    height: 40px;
     background: var(--surface-light);
-    border: 1px solid var(--border);
-    border-radius: calc(var(--border-radius, 12px) - 4px);
+    border: 2px solid var(--border);
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     color: var(--text-dim);
-    z-index: 10;
     transition: all 0.2s ease, border-radius 0.2s ease;
 }
 
 .modal-close-btn:hover {
     background: var(--surface-hover);
     color: var(--text);
+    border-color: var(--text);
+    transform: rotate(90deg) scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .modal-close-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
+    transition: transform 0.2s ease;
+}
+
+.modal-close-btn:hover svg {
+    transform: rotate(90deg);
 }
 
 .modal-content {

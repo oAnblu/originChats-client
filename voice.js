@@ -92,20 +92,24 @@ class VoiceManager {
             const checkSpeaking = (timestamp) => {
                 if (!this.localAnalyzer) return;
 
-                analyzer.getByteFrequencyData(dataArray);
-                const average = (dataArray.reduce((a, b) => a + b, 0) / dataArray.length) * (100 / 255);
+                try {
+                    analyzer.getByteFrequencyData(dataArray);
+                    const average = (dataArray.reduce((a, b) => a + b, 0) / dataArray.length) * (100 / 255);
 
-                const isSpeakingNow = average > this.micThreshold;
+                    const isSpeakingNow = average > this.micThreshold;
 
-                if (isSpeakingNow !== this.isSpeaking) {
-                    this.isSpeaking = isSpeakingNow;
-                    console.log('[Voice] Speaking state changed:', this.isSpeaking, '(average:', average.toFixed(2), ', threshold:', this.micThreshold + ')');
+                    if (isSpeakingNow !== this.isSpeaking) {
+                        this.isSpeaking = isSpeakingNow;
+                        console.log('[Voice] Speaking state changed:', this.isSpeaking, '(average:', average.toFixed(2), ', threshold:', this.micThreshold + ')');
 
-                    // Update channel list to show speaking state
-                    if (typeof renderChannels === 'function' && timestamp - lastRenderTime > RENDER_THROTTLE_MS) {
-                        lastRenderTime = timestamp;
-                        renderChannels();
+                        // Update channel list to show speaking state
+                        if (typeof renderChannels === 'function' && timestamp - lastRenderTime > RENDER_THROTTLE_MS) {
+                            lastRenderTime = timestamp;
+                            renderChannels();
+                        }
                     }
+                } catch (e) {
+                    console.error('[Voice] Error in local speaking detection:', e);
                 }
 
                 requestAnimationFrame(checkSpeaking);
@@ -234,24 +238,47 @@ class VoiceManager {
         // Close all audio contexts to prevent memory leaks
         this.audioContexts.forEach((audioContext) => {
             if (audioContext && audioContext.close) {
-                audioContext.close();
+                try {
+                    audioContext.close();
+                } catch (e) {
+                    console.error('[Voice] Error closing audio context:', e);
+                }
             }
         });
         this.audioContexts.clear();
 
         // Clean up local audio context
         if (this.localAudioContext) {
-            this.localAudioContext.close();
+            try {
+                this.localAudioContext.close();
+            } catch (e) {
+                console.error('[Voice] Error closing local audio context:', e);
+            }
             this.localAudioContext = null;
         }
 
+        // Clean up speaking detectors
+        this.speakingDetectors.forEach((analyzer, peerId) => {
+            if (analyzer && analyzer.disconnect) {
+                analyzer.disconnect();
+            }
+        });
         this.speakingDetectors.clear();
+
         this.localAnalyzer = null;
         this.isSpeaking = false;
 
         // Stop local stream
         if (this.localStream) {
-            this.localStream.getTracks().forEach(track => track.stop());
+            try {
+                this.localStream.getTracks().forEach(track => {
+                    if (track.stop) {
+                        track.stop();
+                    }
+                });
+            } catch (e) {
+                console.error('[Voice] Error stopping local stream:', e);
+            }
             this.localStream = null;
         }
 
@@ -261,7 +288,11 @@ class VoiceManager {
 
         // Remove local audio element
         if (this.localAudioElement) {
-            this.localAudioElement.remove();
+            try {
+                this.localAudioElement.remove();
+            } catch (e) {
+                console.error('[Voice] Error removing local audio element:', e);
+            }
             this.localAudioElement = null;
         }
 
@@ -563,25 +594,29 @@ class VoiceManager {
             this.audioContexts.set(peerId, audioContext);
 
             const checkSpeaking = (timestamp) => {
-                analyzer.getByteFrequencyData(dataArray);
-                const average = (dataArray.reduce((a, b) => a + b, 0) / dataArray.length) * (100 / 255);
+                try {
+                    analyzer.getByteFrequencyData(dataArray);
+                    const average = (dataArray.reduce((a, b) => a + b, 0) / dataArray.length) * (100 / 255);
 
-                const participant = this._findParticipantByUsername(username);
+                    const participant = this._findParticipantByUsername(username);
 
-                if (participant) {
-                    const isSpeakingNow = average > this.micThreshold;
+                    if (participant) {
+                        const isSpeakingNow = average > this.micThreshold;
 
-                    if (isSpeakingNow !== participant.speaking) {
-                        this._setParticipant(username, {
-                            ...participant,
-                            speaking: isSpeakingNow
-                        });
+                        if (isSpeakingNow !== participant.speaking) {
+                            this._setParticipant(username, {
+                                ...participant,
+                                speaking: isSpeakingNow
+                            });
 
-                        if (typeof renderChannels === 'function' && timestamp - lastRenderTime > RENDER_THROTTLE_MS) {
-                            lastRenderTime = timestamp;
-                            renderChannels();
+                            if (typeof renderChannels === 'function' && timestamp - lastRenderTime > RENDER_THROTTLE_MS) {
+                                lastRenderTime = timestamp;
+                                renderChannels();
+                            }
                         }
                     }
+                } catch (e) {
+                    console.error('[Voice] Error in speaking detection loop:', e);
                 }
 
                 const frameId = requestAnimationFrame(checkSpeaking);
