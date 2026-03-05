@@ -168,7 +168,7 @@ function uploadImageWithXHR(file, url, headers) {
         xhr.open('POST', url);
 
         for (const [key, value] of Object.entries(headers)) {
-            xhr.setRequestHeader(key, value);
+            xhr.setRequestHeader(key, value.replaceAll("$filename", file.name));
         }
 
         xhr.onload = () => {
