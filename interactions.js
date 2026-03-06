@@ -869,6 +869,12 @@ function renderReactions(msg, container) {
             <span class="reaction-emoji">${emoji}</span>
             <span class="reaction-count">${count}</span>
         `;
+        
+        const tooltip = document.createElement('div');
+        tooltip.className = 'reaction-tooltip';
+        tooltip.innerHTML = users.map(u => u === state.currentUser?.username ? `${u} (you)` : u).join(', ');
+        reactionEl.appendChild(tooltip);
+        
         reactionEl.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleReaction(msg.id, emoji);
@@ -1221,7 +1227,30 @@ function renderGifs(results, isFavorites = false) {
         starBtn.classList.toggle('active', isFav);
         starBtn.onclick = (e) => {
             e.stopPropagation();
-            toggleFavorite({ url: itemUrl, preview: previewUrl });
+            const tenorMatch = itemUrl.match(/tenor\.com\/view\/[\w-]+-(\d+)(?:\?.*)?$/i);
+            if (tenorMatch) {
+                const tenorId = tenorMatch[1];
+                fetch(`https://apps.mistium.com/tenor/get?id=${tenorId}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data && data[0] && data[0].media && data[0].media[0]) {
+                            const media = data[0].media[0];
+                            const gifUrl = media.mediumgif?.url || media.gif?.url || media.tinygif?.url;
+                            if (gifUrl) {
+                                toggleFavorite({ url: gifUrl, preview: previewUrl });
+                            } else {
+                                toggleFavorite({ url: itemUrl, preview: previewUrl });
+                            }
+                        } else {
+                            toggleFavorite({ url: itemUrl, preview: previewUrl });
+                        }
+                    })
+                    .catch(() => {
+                        toggleFavorite({ url: itemUrl, preview: previewUrl });
+                    });
+            } else {
+                toggleFavorite({ url: itemUrl, preview: previewUrl });
+            }
         };
 
         wrapper.appendChild(img);
@@ -1333,8 +1362,34 @@ window.toggleModalFavorite = toggleModalFavorite;
 
 function sendGif(url) {
     const input = document.getElementById('message-input');
-    input.value = url;
-    sendMessage();
+    const tenorMatch = url.match(/tenor\.com\/view\/[\w-]+-(\d+)(?:\?.*)?$/i);
+    
+    if (tenorMatch) {
+        const tenorId = tenorMatch[1];
+        fetch(`https://apps.mistium.com/tenor/get?id=${tenorId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data[0] && data[0].media && data[0].media[0]) {
+                    const media = data[0].media[0];
+                    const gifUrl = media.mediumgif?.url || media.gif?.url || media.tinygif?.url;
+                    if (gifUrl) {
+                        input.value = gifUrl;
+                    } else {
+                        input.value = url;
+                    }
+                } else {
+                    input.value = url;
+                }
+                sendMessage();
+            })
+            .catch(() => {
+                input.value = url;
+                sendMessage();
+            });
+    } else {
+        input.value = url;
+        sendMessage();
+    }
 }
 
 document.addEventListener('click', (e) => {
@@ -1354,6 +1409,7 @@ window.toggleReaction = toggleReaction;
 window.toggleEmojiPicker = toggleEmojiPicker;
 window.openReactionPicker = openReactionPicker;
 window.closeReactionPicker = closeReactionPicker;
+window.renderReactions = renderReactions;
 
 function getOrCreateMessageOptions(container) {
     let options = container.querySelector('.message-options');

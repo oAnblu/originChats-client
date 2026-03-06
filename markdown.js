@@ -88,7 +88,9 @@ function parseMarkdown(text, embedLinks) {
 function parseMsg(msg, embedLinks) {
     let text = replaceShortcodes(msg.content);
     text = parseMarkdown(text, embedLinks);
-    text = DOMPurify.sanitize(text);
+    text = DOMPurify.sanitize(text, {
+        ADD_ATTR: ['target', 'rel']
+    });
     return text;
 }
 

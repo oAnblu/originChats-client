@@ -4565,7 +4565,7 @@ function makeMessageElement(msg, isSameUserRecent) {
         }
     }
 
-    renderReactions(msg, groupContent);
+    window.renderReactions(msg, groupContent);
 
     setupMessageSwipe(wrapper, msg);
 
@@ -4709,7 +4709,7 @@ function revealBlockedMessage(wrapper, msg) {
         }).catch(() => { });
     });
 
-    renderReactions(msg, groupContent);
+    window.renderReactions(msg, groupContent);
 
     // Add context menu listener for blocked message content
     wrapper.addEventListener('contextmenu', (e) => {
