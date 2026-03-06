@@ -607,7 +607,7 @@ function updateChannelIndicators(element, channel) {
 }
 
 function shouldShowTypingIndicator(channelName) {
-    const typingMap = state.typingUsers[channelName];
+    const typingMap = state.typingUsersByServer[state.serverUrl]?.[channelName];
     return typingMap && typingMap.size > 0;
 }
 

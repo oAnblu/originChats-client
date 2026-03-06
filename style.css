@@ -819,15 +819,6 @@ blockquote {
         height: 36px;
         margin-right: 10px;
     }
-
-    .message-single {
-        margin-left: 46px;
-    }
-
-    .message-single .hover-timestamp {
-        left: -46px;
-        width: 44px;
-    }
 }
 
 .message-image {
@@ -1789,16 +1780,6 @@ a {
 
 .message-single:hover::before {
     background: rgba(255, 255, 255, 0.02);
-}
-
-.message-single .message-group-content {
-    padding-left: 0;
-    flex: 1;
-    min-width: 0;
-}
-
-.message-single .message-text {
-    padding: 2px 0;
 }
 
 #chat-container {
@@ -5150,11 +5131,6 @@ body {
 
     .message-text ::selection {
         background: rgba(155, 135, 245, 0.3);
-    }
-
-    .message-single {
-        margin-left: 56px;
-        padding: 2px 0;
     }
 
     .message-reply {

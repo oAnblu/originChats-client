@@ -2804,7 +2804,7 @@ function updateTypingIndicator() {
     const channel = state.currentChannel?.name;
     if (!channel) return;
 
-    const typingMap = state.typingUsers[channel];
+    const typingMap = state.typingUsersByServer[state.serverUrl]?.[channel];
     if (!typingMap) return;
 
     const now = Date.now();
@@ -2852,7 +2852,7 @@ function updateChannelListTyping(channelName) {
         const nameEl = item.querySelector('span:nth-child(2)');
         if (nameEl && nameEl.textContent === channelName) {
             let indicator = item.querySelector('.channel-typing-indicator');
-            const typingMap = state.typingUsers[channelName];
+            const typingMap = state.typingUsersByServer[state.serverUrl]?.[channelName];
 
             if (typingMap && typingMap.size > 0) {
                 if (!indicator) {
