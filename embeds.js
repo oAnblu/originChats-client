@@ -1,58 +1,88 @@
-function detectEmbedType(url) {
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true when the message's only embed link is a bare Tenor URL,
+ * meaning the raw URL text should be hidden in favour of the GIF embed.
+ */
+function isTenorOnlyMessage(embedLinks, content) {
+    return (
+        embedLinks.length === 1 &&
+        /tenor\.com\/view\/[\w-]+-\d+(?:\?.*)?$/i.test(embedLinks[0]) &&
+        content.trim() === embedLinks[0]
+    );
+}
+window.isTenorOnlyMessage = isTenorOnlyMessage;
+
+/**
+ * Builds a YouTube iframe and mounts it into targetContainer (clearing it first).
+ * Used both on initial thumbnail click and when re-wiring cached embeds after cloneNode.
+ */
+function _mountYouTubeIframe(targetContainer, videoId) {
+    targetContainer.innerHTML = '';
+    const wrapper = document.createElement('div');
+    wrapper.className = 'youtube-iframe';
+    const iframe = document.createElement('iframe');
+    iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+    iframe.allowFullscreen = true;
+    wrapper.appendChild(iframe);
+    targetContainer.appendChild(wrapper);
+}
+
+// ─── Embed type detection ────────────────────────────────────────────────────
+
+async function detectEmbedType(url) {
     const ytMatch = url.match(YOUTUBE_REGEX);
-    if (ytMatch) {
-        return { type: 'youtube', videoId: ytMatch[1] };
+    if (ytMatch) return { type: 'youtube', videoId: ytMatch[1] };
+
+    if (/tenor\.com\/view\/[\w-]+-\d+(?:\?.*)?$/i.test(url)) {
+        const id = url.match(/tenor\.com\/view\/[\w-]+-(\d+)/i)?.[1];
+        return { type: 'tenor', id, url };
     }
 
-    const tenorMatch = url.match(/tenor\.com\/view\/[\w-]+-(\d+)(?:\?.*)?$/i);
-    if (tenorMatch) {
-        return { type: 'tenor', id: tenorMatch[1], url };
-    }
-    
-    const githubMatch = url.match(/github\.com\/([a-zA-Z0-9-]+(?:\/[a-zA-Z0-9._-]+)?)(?:\/)?$/i);
-    if (githubMatch) {
-        return { type: 'github', path: githubMatch[1], url };
+    if (/github\.com\/([a-zA-Z0-9-]+(?:\/[a-zA-Z0-9._-]+)?)(?:\/)?$/i.test(url)) {
+        const path = url.match(/github\.com\/([a-zA-Z0-9-]+(?:\/[a-zA-Z0-9._-]+)?)/i)?.[1];
+        return { type: 'github', path, url };
     }
 
-    if (hasExtension(url, VIDEO_EXTENSIONS)) {
-        return { type: 'video', url };
-    }
+    if (hasExtension(url, VIDEO_EXTENSIONS) || url.startsWith('data:video/')) return { type: 'video', url };
+    if (hasExtension(url, IMAGE_EXTENSIONS) || url.startsWith('data:image/')) return { type: 'image', url };
 
-    if (hasExtension(url, IMAGE_EXTENSIONS) || url.startsWith('data:image/')) {
-        return { type: 'image', url };
-    }
-
-    if (url.startsWith('data:video/')) {
-        return { type: 'video', url };
-    }
+    // Unknown extension — do a HEAD request to sniff Content-Type
+    try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(url, { method: 'HEAD', mode: 'cors', signal: controller.signal });
+        clearTimeout(timer);
+        if (res.ok) {
+            const ct = res.headers.get('Content-Type') || '';
+            if (ct.startsWith('video/')) return { type: 'video', url };
+            if (ct.startsWith('image/')) return { type: 'image', url };
+        }
+    } catch (_) { }
 
     return { type: 'unknown', url };
 }
 
-async function createEmbed(url) {
-    const embedInfo = detectEmbedType(url);
+// ─── createEmbed ─────────────────────────────────────────────────────────────
 
+async function createEmbed(url) {
+    const embedInfo = await detectEmbedType(url);
     switch (embedInfo.type) {
-        case 'youtube':
-            return createYouTubeEmbed(embedInfo.videoId, url);
-        case 'tenor':
-            return await createTenorEmbed(embedInfo.id, url);
-        case 'github':
-            return await createGitHubEmbed(embedInfo.path, url);
-        case 'video':
-            return createVideoEmbed(embedInfo.url);
-        case 'image':
-            return null;
+        case 'youtube': return createYouTubeEmbed(embedInfo.videoId, url);
+        case 'tenor': return await createTenorEmbed(embedInfo.id, url);
+        case 'github': return await createGitHubEmbed(embedInfo.path, url);
+        case 'video': return createVideoEmbed(embedInfo.url);
+        case 'image': return null;
         default:
             if (url.startsWith('data:') || url.startsWith('blob:')) {
-                const isImage = await isImageUrl(url);
-                if (isImage === true) {
-                    return createImageEmbed(url);
-                }
+                if (await isImageUrl(url) === true) return createImageEmbed(url);
             }
             return null;
     }
 }
+
+// ─── Embed renderers ─────────────────────────────────────────────────────────
 
 function createYouTubeEmbed(videoId, originalUrl) {
     const container = document.createElement('div');
@@ -70,20 +100,8 @@ function createYouTubeEmbed(videoId, originalUrl) {
             <path d="M 45,24 27,14 27,34" fill="#fff"/>
         </svg>
     `;
-
     thumbnail.appendChild(playButton);
-
-    thumbnail.addEventListener('click', () => {
-        container.innerHTML = '';
-        const iframeWrapper = document.createElement('div');
-        iframeWrapper.className = 'youtube-iframe';
-        const iframe = document.createElement('iframe');
-        iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-        iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
-        iframe.allowFullscreen = true;
-        iframeWrapper.appendChild(iframe);
-        container.appendChild(iframeWrapper);
-    });
+    thumbnail.addEventListener('click', () => _mountYouTubeIframe(container, videoId));
 
     fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(originalUrl)}`)
         .then(res => res.json())
@@ -103,38 +121,27 @@ function createYouTubeEmbed(videoId, originalUrl) {
 
 async function createTenorEmbed(tenorId, originalUrl) {
     try {
-        console.log(`Fetching Tenor GIF with ID: ${tenorId}`);
         const response = await fetch(`https://apps.mistium.com/tenor/get?id=${tenorId}`);
-        if (!response.ok) {
-            console.error(`Tenor API failed with status: ${response.status}`);
-            throw new Error('Tenor API failed');
-        }
+        if (!response.ok) throw new Error('Tenor API failed');
 
         const data = await response.json();
-        console.log('Tenor API response:', data);
-        
-        if (!data || !data[0] || !data[0].media || !data[0].media[0]) {
-            console.error('Invalid Tenor response structure:', data);
-            throw new Error('Invalid Tenor response');
-        }
+        if (!data?.[0]?.media?.[0]) throw new Error('Invalid Tenor response');
 
         const media = data[0].media[0];
         const gifUrl = media.mediumgif?.url || media.gif?.url || media.tinygif?.url;
-
-        if (!gifUrl) {
-            console.error('No GIF URL found in media:', media);
-            throw new Error('No GIF URL found');
-        }
-        
-        console.log(`Found GIF URL: ${gifUrl}`);
+        if (!gifUrl) throw new Error('No GIF URL found');
 
         const container = document.createElement('div');
         container.className = 'embed-container tenor-embed';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'chat-image-wrapper';
 
         const link = document.createElement('a');
         link.href = originalUrl;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
+        link.onclick = (e) => { e.preventDefault(); if (window.openImageModal) window.openImageModal(gifUrl); };
 
         const img = document.createElement('img');
         img.src = gifUrl;
@@ -142,21 +149,13 @@ async function createTenorEmbed(tenorId, originalUrl) {
         img.className = 'tenor-gif';
         img.loading = 'lazy';
         img.onerror = () => {
-            const fallbackLink = document.createElement('a');
-            fallbackLink.href = originalUrl;
-            fallbackLink.target = '_blank';
-            fallbackLink.rel = 'noopener noreferrer';
-            fallbackLink.textContent = originalUrl;
-            fallbackLink.className = 'failed-image-link';
-            container.replaceWith(fallbackLink);
-        };
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'chat-image-wrapper';
-
-        link.onclick = (e) => {
-            e.preventDefault();
-            if (window.openImageModal) window.openImageModal(gifUrl);
+            const fallback = document.createElement('a');
+            fallback.href = originalUrl;
+            fallback.target = '_blank';
+            fallback.rel = 'noopener noreferrer';
+            fallback.textContent = originalUrl;
+            fallback.className = 'failed-image-link';
+            container.replaceWith(fallback);
         };
 
         link.appendChild(img);
@@ -164,13 +163,9 @@ async function createTenorEmbed(tenorId, originalUrl) {
 
         const favBtn = createFavButton(gifUrl, gifUrl);
         wrapper.appendChild(favBtn);
+        if (window.lucide) setTimeout(() => window.lucide.createIcons({ root: favBtn }), 0);
 
         container.appendChild(wrapper);
-
-        if (window.lucide) {
-            setTimeout(() => window.lucide.createIcons({ root: favBtn }), 0);
-        }
-
         return container;
     } catch (error) {
         console.debug('Tenor embed failed:', error);
@@ -181,17 +176,14 @@ async function createTenorEmbed(tenorId, originalUrl) {
 function createVideoEmbed(url) {
     const container = document.createElement('div');
     container.className = 'embed-container video-embed';
-
     const video = document.createElement('video');
     video.src = url;
     video.controls = true;
     video.preload = 'metadata';
     video.className = 'video-player';
-
     video.onerror = () => {
         container.innerHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer">Video failed to load - click to open</a>`;
     };
-
     container.appendChild(video);
     return container;
 }
@@ -200,10 +192,14 @@ function createImageEmbed(url) {
     const container = document.createElement('div');
     container.className = 'embed-container image-embed';
 
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chat-image-wrapper';
+
     const link = document.createElement('a');
     link.href = url;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
+    link.onclick = (e) => { e.preventDefault(); if (window.openImageModal) window.openImageModal(url); };
 
     const img = document.createElement('img');
     img.src = url;
@@ -211,21 +207,13 @@ function createImageEmbed(url) {
     img.className = 'message-image';
     img.loading = 'lazy';
     img.onerror = () => {
-        const fallbackLink = document.createElement('a');
-        fallbackLink.href = url;
-        fallbackLink.target = '_blank';
-        fallbackLink.rel = 'noopener noreferrer';
-        fallbackLink.textContent = url;
-        fallbackLink.className = 'failed-image-link';
-        container.replaceWith(fallbackLink);
-    };
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'chat-image-wrapper';
-
-    link.onclick = (e) => {
-        e.preventDefault();
-        if (window.openImageModal) window.openImageModal(url);
+        const fallback = document.createElement('a');
+        fallback.href = url;
+        fallback.target = '_blank';
+        fallback.rel = 'noopener noreferrer';
+        fallback.textContent = url;
+        fallback.className = 'failed-image-link';
+        container.replaceWith(fallback);
     };
 
     link.appendChild(img);
@@ -233,32 +221,28 @@ function createImageEmbed(url) {
 
     const favBtn = createFavButton(url, url);
     wrapper.appendChild(favBtn);
+    if (window.lucide) setTimeout(() => window.lucide.createIcons({ root: favBtn }), 0);
 
     container.appendChild(wrapper);
-
-    if (window.lucide) {
-        setTimeout(() => window.lucide.createIcons({ root: favBtn }), 0);
-    }
-
     return container;
 }
+
+// ─── Favourites button ───────────────────────────────────────────────────────
 
 function createFavButton(url, preview) {
     const btn = document.createElement('button');
     btn.className = 'chat-fav-btn';
     btn.dataset.url = url;
-
     try {
         const favs = JSON.parse(localStorage.getItem('originChats_favGifs')) || [];
         const isFav = favs.some(f => f.url === url);
         if (isFav) btn.classList.add('active');
-        btn.innerHTML = isFav ?
-            '<i data-lucide="star" fill="currentColor"></i>' :
-            '<i data-lucide="star"></i>';
-    } catch (e) {
+        btn.innerHTML = isFav
+            ? '<i data-lucide="star" fill="currentColor"></i>'
+            : '<i data-lucide="star"></i>';
+    } catch (_) {
         btn.innerHTML = '<i data-lucide="star"></i>';
     }
-
     btn.onclick = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -266,103 +250,188 @@ function createFavButton(url, preview) {
     };
     return btn;
 }
-
 window.createFavButton = createFavButton;
+
+// ─── isImageUrl ──────────────────────────────────────────────────────────────
 
 async function isImageUrl(url, timeout = 5000) {
     try {
         if (YOUTUBE_REGEX.test(url)) {
-            const oembedUrl = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`;
             try {
-                const res = await fetch(oembedUrl);
-                if (!res.ok) throw new Error("oEmbed failed");
+                const res = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`);
+                if (!res.ok) throw new Error('oEmbed failed');
                 const data = await res.json();
-                return {
-                    type: "video",
-                    provider: "youtube",
-                    title: data.title,
-                    author: data.author_name,
-                    thumbnail: data.thumbnail_url,
-                    width: data.width,
-                    height: data.height,
-                    html: data.html
-                };
-            } catch {
-                return { type: "unknown" };
-            }
+                return { type: 'video', provider: 'youtube', title: data.title, author: data.author_name, thumbnail: data.thumbnail_url, width: data.width, height: data.height, html: data.html };
+            } catch { return { type: 'unknown' }; }
         }
 
-        if (url.startsWith("data:image/") || url.startsWith("blob:")) {
-            return true;
-        }
-
-        if (hasExtension(url, IMAGE_EXTENSIONS)) {
-            return true;
-        }
+        if (url.startsWith('data:image/') || url.startsWith('blob:')) return true;
+        if (hasExtension(url, IMAGE_EXTENSIONS)) return true;
+        if (hasExtension(url, VIDEO_EXTENSIONS) || url.startsWith('data:video/')) return 'video';
 
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeout);
-
-        const res = await fetch(url, {
-            method: "HEAD",
-            mode: "cors",
-            signal: controller.signal
-        });
-
+        const res = await fetch(url, { method: 'HEAD', mode: 'cors', signal: controller.signal });
         clearTimeout(timer);
 
         if (!res.ok) return false;
+        const ct = res.headers.get('content-type') || '';
+        if (ct.startsWith('image/')) return true;
+        if (ct.startsWith('video/')) return 'video';
+    } catch (_) { }
 
-        const type = res.headers.get("content-type");
-        if (type && type.startsWith("image/")) return true;
-
-    } catch (_) {
-    }
-
+    // Last resort: try loading as an image element
     return new Promise((resolve) => {
         const img = new Image();
-        const timer = setTimeout(() => {
-            img.src = "";
-            resolve(false);
-        }, timeout);
-
-        img.onload = () => {
-            clearTimeout(timer);
-            resolve(true);
-        };
-
-        img.onerror = () => {
-            clearTimeout(timer);
-            resolve(false);
-        };
-
-        img.referrerPolicy = "no-referrer";
+        const timer = setTimeout(() => { img.src = ''; resolve(false); }, timeout);
+        img.onload = () => { clearTimeout(timer); resolve(true); };
+        img.onerror = () => { clearTimeout(timer); resolve(false); };
+        img.referrerPolicy = 'no-referrer';
         img.src = url;
     });
+}
+
+// ─── Potential-image link processing (moved from main.js) ────────────────────
+
+/**
+ * Mutates a `.potential-image` link to render its target as an inline video.
+ */
+function _renderVideoEmbed(link, url) {
+    const embed = createVideoEmbed(url);
+    link.textContent = '';
+    link.appendChild(embed);
+    link.onclick = (e) => e.preventDefault();
+    link.classList.remove('potential-image');
+}
+
+/**
+ * Inspects a `.potential-image` anchor and replaces its contents with an
+ * inline image or video depending on the URL's content type.
+ */
+function _processPotentialImageLink(link, groupContent) {
+    const url = link.dataset.imageUrl;
+
+    // Fast path: known video extension or data URI — no network request needed
+    if (hasExtension(url, VIDEO_EXTENSIONS) || url.startsWith('data:video/')) {
+        _renderVideoEmbed(link, url);
+        return;
+    }
+
+    isImageUrl(url).then(isImage => {
+        if (!isImage) return;
+        if (isImage === 'video') { _renderVideoEmbed(link, url); return; }
+        // Object return == YouTube — already handled via embedLinks / createEmbed
+        if (typeof isImage === 'object') return;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'chat-image-wrapper';
+
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = 'image';
+        img.className = 'message-image';
+
+        if (window.createFavButton) {
+            const favBtn = window.createFavButton(url, url);
+            wrapper.appendChild(favBtn);
+            if (window.lucide) setTimeout(() => window.lucide.createIcons({ root: favBtn }), 0);
+        }
+        wrapper.appendChild(img);
+
+        link.textContent = '';
+        link.appendChild(wrapper);
+        link.onclick = (e) => { e.preventDefault(); if (window.openImageModal) window.openImageModal(url); };
+        link.classList.remove('potential-image');
+    }).catch(err => {
+        // Final fallback: manual HEAD check for video content-type
+        fetch(url, { method: 'HEAD', mode: 'cors' })
+            .then(res => { if ((res.headers.get('Content-Type') || '').startsWith('video/')) _renderVideoEmbed(link, url); })
+            .catch(() => { });
+        console.debug('Image check failed for URL:', url, err);
+    });
+}
+
+/**
+ * Appends or refreshes embed elements inside a message's groupContent element.
+ * Handles both cache hits (re-wiring YouTube click handlers post-cloneNode)
+ * and cache misses (calling createEmbed and storing the result).
+ */
+function _processEmbedLinks(embedLinks, groupContent) {
+    // Clear stale embeds (needed on the updateMessageContent path)
+    groupContent.querySelectorAll('.embed-container').forEach(e => e.remove());
+
+    for (const url of embedLinks) {
+        if (url in state._embedCache) {
+            const cachedEl = state._embedCache[url];
+            if (!cachedEl) continue;
+
+            const cloned = cachedEl.cloneNode(true);
+
+            // Re-wire YouTube play button — event listeners don't survive cloneNode
+            const thumbnail = cloned.querySelector('.youtube-thumbnail');
+            if (thumbnail) {
+                const videoId = url.match(YOUTUBE_REGEX)?.[1];
+                const container = thumbnail.closest('.youtube-embed');
+                if (container && videoId) {
+                    thumbnail.addEventListener('click', () => _mountYouTubeIframe(container, videoId));
+                }
+            }
+
+            groupContent.appendChild(cloned);
+        } else {
+            createEmbed(url).then(embedEl => {
+                state._embedCache[url] = embedEl ? embedEl.cloneNode(true) : null;
+                if (embedEl) groupContent.appendChild(embedEl);
+            });
+        }
+    }
+}
+
+// ─── GitHub embeds ───────────────────────────────────────────────────────────
+
+// Shared DOM micro-helpers to avoid repetition across user/org/repo embeds
+function _createGitHubHeader(url, name, badgeText) {
+    const header = document.createElement('div');
+    header.className = 'github-header';
+    const link = document.createElement('a');
+    link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    link.className = 'github-name'; link.textContent = name;
+    const badge = document.createElement('span');
+    badge.className = 'github-type'; badge.textContent = badgeText;
+    header.appendChild(link); header.appendChild(badge);
+    return header;
+}
+function _createGitHubStat(label, value) {
+    const stat = document.createElement('div');
+    stat.className = 'github-stat';
+    stat.innerHTML = `<span class="stat-value">${formatNumber(value)}</span><span class="stat-label">${label}</span>`;
+    return stat;
+}
+function _createGitHubWebsiteLink(href) {
+    const link = document.createElement('a');
+    link.href = href.startsWith('http') ? href : `https://${href}`;
+    link.target = '_blank'; link.rel = 'noopener noreferrer'; link.className = 'github-website';
+    link.innerHTML = `<i data-lucide="link"></i> ${href.replace(/^https?:\/\//, '')}`;
+    return link;
+}
+function _createGitHubMetaItem(icon, html) {
+    const el = document.createElement('div');
+    el.className = 'github-meta-item';
+    el.innerHTML = `<i data-lucide="${icon}"></i> ${html}`;
+    return el;
 }
 
 async function createGitHubEmbed(usernameOrPath, originalUrl) {
     try {
         const pathMatch = usernameOrPath.match(/^([^/]+)\/([^/]+)$/);
-        
-        if (pathMatch) {
-            return await createGitHubRepoEmbed(pathMatch[1], pathMatch[2], originalUrl);
-        }
-        
-        const response = await fetch(`https://api.github.com/users/${usernameOrPath}`);
-        
-        if (!response.ok) {
-            throw new Error('GitHub API failed');
-        }
+        if (pathMatch) return await createGitHubRepoEmbed(pathMatch[1], pathMatch[2], originalUrl);
 
+        const response = await fetch(`https://api.github.com/users/${usernameOrPath}`);
+        if (!response.ok) throw new Error('GitHub API failed');
         const data = await response.json();
-        
-        if (!data || data.message) {
-            throw new Error('User/org not found');
-        }
+        if (!data || data.message) throw new Error('User/org not found');
 
         const isOrg = data.type === 'Organization';
-        
         const container = document.createElement('div');
         container.className = `embed-container ${isOrg ? 'github-org-embed' : 'github-user-embed'}`;
 
@@ -370,32 +439,13 @@ async function createGitHubEmbed(usernameOrPath, originalUrl) {
         wrapper.className = 'github-embed-wrapper';
 
         const avatar = document.createElement('img');
-        avatar.src = data.avatar_url;
-        avatar.alt = `${usernameOrPath} avatar`;
-        avatar.className = 'github-avatar';
-        avatar.loading = 'lazy';
+        avatar.src = data.avatar_url; avatar.alt = `${usernameOrPath} avatar`;
+        avatar.className = 'github-avatar'; avatar.loading = 'lazy';
         wrapper.appendChild(avatar);
 
         const content = document.createElement('div');
         content.className = 'github-content';
-
-        const header = document.createElement('div');
-        header.className = 'github-header';
-        
-        const link = document.createElement('a');
-        link.href = originalUrl;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.className = 'github-name';
-        link.textContent = data.name || usernameOrPath;
-        header.appendChild(link);
-
-        const typeBadge = document.createElement('span');
-        typeBadge.className = 'github-type';
-        typeBadge.textContent = isOrg ? 'Organization' : 'User';
-        header.appendChild(typeBadge);
-
-        content.appendChild(header);
+        content.appendChild(_createGitHubHeader(originalUrl, data.name || usernameOrPath, isOrg ? 'Organization' : 'User'));
 
         if (data.description || data.bio) {
             const bio = document.createElement('div');
@@ -404,101 +454,54 @@ async function createGitHubEmbed(usernameOrPath, originalUrl) {
             content.appendChild(bio);
         }
 
-        const createStat = (label, value) => {
-            const stat = document.createElement('div');
-            stat.className = 'github-stat';
-            stat.innerHTML = `<span class="stat-value">${formatNumber(value)}</span><span class="stat-label">${label}</span>`;
-            return stat;
-        };
-
         const stats = document.createElement('div');
         stats.className = 'github-stats';
-
-        if (isOrg) {
-            stats.appendChild(createStat('Followers', data.followers));
-            stats.appendChild(createStat('Repos', data.public_repos));
-        } else {
-            stats.appendChild(createStat('Followers', data.followers));
-            stats.appendChild(createStat('Following', data.following));
-            stats.appendChild(createStat('Repos', data.public_repos));
-        }
-
+        stats.appendChild(_createGitHubStat('Followers', data.followers));
+        if (!isOrg) stats.appendChild(_createGitHubStat('Following', data.following));
+        stats.appendChild(_createGitHubStat('Repos', data.public_repos));
         content.appendChild(stats);
 
-        if (data.blog) {
-            const websiteLink = document.createElement('a');
-            websiteLink.href = data.blog.startsWith('http') ? data.blog : `https://${data.blog}`;
-            websiteLink.target = '_blank';
-            websiteLink.rel = 'noopener noreferrer';
-            websiteLink.className = 'github-website';
-            websiteLink.innerHTML = `<i data-lucide="link"></i> ${data.blog.replace(/^https?:\/\//, '')}`;
-            content.appendChild(websiteLink);
-        }
+        if (data.blog) content.appendChild(_createGitHubWebsiteLink(data.blog));
 
         if (!isOrg && (data.location || data.company)) {
             const meta = document.createElement('div');
             meta.className = 'github-meta';
-            
-            if (data.location) {
-                const locationEl = document.createElement('div');
-                locationEl.className = 'github-meta-item';
-                locationEl.innerHTML = `<i data-lucide="map-pin"></i> ${data.location}`;
-                meta.appendChild(locationEl);
-            }
-            
+            if (data.location) meta.appendChild(_createGitHubMetaItem('map-pin', data.location));
             if (data.company) {
-                let companyText = data.company;
-                companyText = companyText.replace(/@(\w+)/g, '<a href="https://github.com/$1" target="_blank" rel="noopener noreferrer">@$1</a>');
-                const companyEl = document.createElement('div');
-                companyEl.className = 'github-meta-item';
-                companyEl.innerHTML = `<i data-lucide="building"></i> ${companyText}`;
-                meta.appendChild(companyEl);
+                const companyHtml = data.company.replace(/@(\w+)/g, '<a href="https://github.com/$1" target="_blank" rel="noopener noreferrer">@$1</a>');
+                meta.appendChild(_createGitHubMetaItem('building', companyHtml));
             }
-            
             content.appendChild(meta);
         }
 
         if (data.created_at) {
-            const createdAt = document.createElement('div');
-            createdAt.className = 'github-created';
-            const joinDate = new Date(data.created_at);
-            createdAt.textContent = `${isOrg ? 'Created' : 'Joined'} ${formatDate(joinDate)}`;
-            content.appendChild(createdAt);
+            const el = document.createElement('div');
+            el.className = 'github-created';
+            el.textContent = `${isOrg ? 'Created' : 'Joined'} ${formatDate(new Date(data.created_at))}`;
+            content.appendChild(el);
         }
 
         try {
-            const endpoint = isOrg ? 
-                `https://api.github.com/orgs/${usernameOrPath}/repos?per_page=1&sort=updated` :
-                `https://api.github.com/users/${usernameOrPath}/repos?per_page=1&sort=updated`;
-            
-            const reposResponse = await fetch(endpoint);
-            if (reposResponse.ok) {
-                const repos = await reposResponse.json();
+            const endpoint = isOrg
+                ? `https://api.github.com/orgs/${usernameOrPath}/repos?per_page=1&sort=updated`
+                : `https://api.github.com/users/${usernameOrPath}/repos?per_page=1&sort=updated`;
+            const reposRes = await fetch(endpoint);
+            if (reposRes.ok) {
+                const repos = await reposRes.json();
                 if (repos.length > 0) {
-                    const latestActivity = document.createElement('div');
-                    latestActivity.className = 'github-activity';
-                    
-                    if (isOrg) {
-                        const lastUpdated = new Date(repos[0].updated_at);
-                        latestActivity.textContent = `Last activity: ${formatDate(lastUpdated)}`;
-                    } else {
-                        latestActivity.textContent = `Latest: ${repos[0].name}`;
-                    }
-                    
-                    content.appendChild(latestActivity);
+                    const el = document.createElement('div');
+                    el.className = 'github-activity';
+                    el.textContent = isOrg
+                        ? `Last activity: ${formatDate(new Date(repos[0].updated_at))}`
+                        : `Latest: ${repos[0].name}`;
+                    content.appendChild(el);
                 }
             }
-        } catch (e) {
-            console.debug('Failed to fetch repos:', e);
-        }
+        } catch (e) { console.debug('Failed to fetch repos:', e); }
 
         wrapper.appendChild(content);
         container.appendChild(wrapper);
-
-        if (window.lucide) {
-            setTimeout(() => window.lucide.createIcons({ root: container }), 0);
-        }
-
+        if (window.lucide) setTimeout(() => window.lucide.createIcons({ root: container }), 0);
         return container;
     } catch (error) {
         console.debug('GitHub embed failed:', error);
@@ -509,16 +512,9 @@ async function createGitHubEmbed(usernameOrPath, originalUrl) {
 async function createGitHubRepoEmbed(owner, repo, originalUrl) {
     try {
         const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
-        
-        if (!response.ok) {
-            throw new Error('GitHub API failed');
-        }
-
+        if (!response.ok) throw new Error('GitHub API failed');
         const data = await response.json();
-        
-        if (!data || data.message) {
-            throw new Error('Repository not found');
-        }
+        if (!data || data.message) throw new Error('Repository not found');
 
         const container = document.createElement('div');
         container.className = 'embed-container github-repo-embed';
@@ -527,124 +523,63 @@ async function createGitHubRepoEmbed(owner, repo, originalUrl) {
         wrapper.className = 'github-embed-wrapper';
 
         const avatar = document.createElement('img');
-        avatar.src = data.owner.avatar_url;
-        avatar.alt = `${owner} avatar`;
-        avatar.className = 'github-avatar';
-        avatar.loading = 'lazy';
+        avatar.src = data.owner.avatar_url; avatar.alt = `${owner} avatar`;
+        avatar.className = 'github-avatar'; avatar.loading = 'lazy';
         wrapper.appendChild(avatar);
 
         const content = document.createElement('div');
         content.className = 'github-content';
-
-        const header = document.createElement('div');
-        header.className = 'github-header';
-        
-        const link = document.createElement('a');
-        link.href = originalUrl;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.className = 'github-name';
-        link.textContent = data.full_name;
-        header.appendChild(link);
-
-        const typeBadge = document.createElement('span');
-        typeBadge.className = 'github-type';
-        typeBadge.textContent = 'Repository';
-        header.appendChild(typeBadge);
-
-        content.appendChild(header);
+        content.appendChild(_createGitHubHeader(originalUrl, data.full_name, 'Repository'));
 
         if (data.description) {
             const bio = document.createElement('div');
-            bio.className = 'github-bio';
-            bio.textContent = data.description;
+            bio.className = 'github-bio'; bio.textContent = data.description;
             content.appendChild(bio);
         }
 
         if (data.language) {
-            const langBadge = document.createElement('div');
-            langBadge.className = 'github-language';
-            langBadge.innerHTML = `<span class="language-dot"></span>${data.language}`;
-            content.appendChild(langBadge);
+            const lang = document.createElement('div');
+            lang.className = 'github-language';
+            lang.innerHTML = `<span class="language-dot"></span>${data.language}`;
+            content.appendChild(lang);
         }
-
-        const createStat = (label, value) => {
-            const stat = document.createElement('div');
-            stat.className = 'github-stat';
-            stat.innerHTML = `<span class="stat-value">${formatNumber(value)}</span><span class="stat-label">${label}</span>`;
-            return stat;
-        };
 
         const stats = document.createElement('div');
         stats.className = 'github-stats';
-
-        stats.appendChild(createStat('Stars', data.stargazers_count));
-        stats.appendChild(createStat('Forks', data.forks_count));
-        stats.appendChild(createStat('Issues', data.open_issues_count));
-
+        stats.appendChild(_createGitHubStat('Stars', data.stargazers_count));
+        stats.appendChild(_createGitHubStat('Forks', data.forks_count));
+        stats.appendChild(_createGitHubStat('Issues', data.open_issues_count));
         content.appendChild(stats);
 
-        if (data.homepage) {
-            const websiteLink = document.createElement('a');
-            websiteLink.href = data.homepage.startsWith('http') ? data.homepage : `https://${data.homepage}`;
-            websiteLink.target = '_blank';
-            websiteLink.rel = 'noopener noreferrer';
-            websiteLink.className = 'github-website';
-            websiteLink.innerHTML = `<i data-lucide="link"></i> ${data.homepage.replace(/^https?:\/\//, '')}`;
-            content.appendChild(websiteLink);
-        }
+        if (data.homepage) content.appendChild(_createGitHubWebsiteLink(data.homepage));
 
-        if (data.topics && data.topics.length > 0) {
-            const topicsContainer = document.createElement('div');
-            topicsContainer.className = 'github-topics';
-            
+        if (data.topics?.length > 0) {
+            const topicsEl = document.createElement('div');
+            topicsEl.className = 'github-topics';
             data.topics.slice(0, 5).forEach(topic => {
-                const topicTag = document.createElement('span');
-                topicTag.className = 'github-topic-tag';
-                topicTag.textContent = topic;
-                topicsContainer.appendChild(topicTag);
+                const tag = document.createElement('span');
+                tag.className = 'github-topic-tag'; tag.textContent = topic;
+                topicsEl.appendChild(tag);
             });
-            
-            content.appendChild(topicsContainer);
+            content.appendChild(topicsEl);
         }
 
         const meta = document.createElement('div');
         meta.className = 'github-meta';
-        
-        if (data.license) {
-            const licenseEl = document.createElement('div');
-            licenseEl.className = 'github-meta-item';
-            licenseEl.innerHTML = `<i data-lucide="scale"></i> ${data.license.spdx_id || data.license.name}`;
-            meta.appendChild(licenseEl);
-        }
-        
-        if (data.created_at) {
-            const createdEl = document.createElement('div');
-            createdEl.className = 'github-meta-item';
-            const createdDate = new Date(data.created_at);
-            createdEl.innerHTML = `<i data-lucide="calendar"></i> Created ${formatDate(createdDate)}`;
-            meta.appendChild(createdEl);
-        }
-        
-        if (meta.children.length > 0) {
-            content.appendChild(meta);
-        }
+        if (data.license) meta.appendChild(_createGitHubMetaItem('scale', data.license.spdx_id || data.license.name));
+        if (data.created_at) meta.appendChild(_createGitHubMetaItem('calendar', `Created ${formatDate(new Date(data.created_at))}`));
+        if (meta.children.length > 0) content.appendChild(meta);
 
         if (data.updated_at) {
-            const updatedAt = document.createElement('div');
-            updatedAt.className = 'github-activity';
-            const lastUpdated = new Date(data.updated_at);
-            updatedAt.textContent = `Updated ${formatDate(lastUpdated)}`;
-            content.appendChild(updatedAt);
+            const el = document.createElement('div');
+            el.className = 'github-activity';
+            el.textContent = `Updated ${formatDate(new Date(data.updated_at))}`;
+            content.appendChild(el);
         }
 
         wrapper.appendChild(content);
         container.appendChild(wrapper);
-
-        if (window.lucide) {
-            setTimeout(() => window.lucide.createIcons({ root: container }), 0);
-        }
-
+        if (window.lucide) setTimeout(() => window.lucide.createIcons({ root: container }), 0);
         return container;
     } catch (error) {
         console.debug('GitHub repo embed failed:', error);
@@ -652,24 +587,22 @@ async function createGitHubRepoEmbed(owner, repo, originalUrl) {
     }
 }
 
+// ─── Formatting utilities ────────────────────────────────────────────────────
+
 function formatNumber(num) {
-    if (num === undefined || num === null) return '?';
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+    if (num == null) return '?';
+    if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+    if (num >= 1_000) return (num / 1_000).toFixed(1) + 'k';
     return num.toString();
 }
 
 function formatDate(date) {
-    const now = new Date();
-    const diff = now - date;
-    
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
+    const diff = Date.now() - date;
+    const minutes = Math.floor(diff / 60_000);
+    const hours = Math.floor(diff / 3_600_000);
+    const days = Math.floor(diff / 86_400_000);
     const months = Math.floor(days / 30);
     const years = Math.floor(days / 365);
-
     if (years > 0) return `${years}y ago`;
     if (months > 0) return `${months}mo ago`;
     if (days > 0) return `${days}d ago`;

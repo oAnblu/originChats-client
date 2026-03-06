@@ -2674,76 +2674,6 @@ function appendMessage(msg) {
     }
 }
 
-/**
- * Shared helper to wire up an image element created from a potential-image link.
- * Used in both makeMessageElement and updateMessageContent.
- */
-function _processPotentialImageLink(link, groupContent) {
-    const url = link.dataset.imageUrl;
-    isImageUrl(url).then(isImage => {
-        if (!isImage) return;
-        const img = document.createElement('img');
-        img.src = url;
-        img.alt = 'image';
-        img.className = 'message-image';
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'chat-image-wrapper';
-        if (window.createFavButton) {
-            const favBtn = window.createFavButton(url, url);
-            wrapper.appendChild(favBtn);
-            if (window.lucide) setTimeout(() => window.lucide.createIcons({ root: favBtn }), 0);
-        }
-        wrapper.appendChild(img);
-
-        link.textContent = '';
-        link.appendChild(wrapper);
-        link.onclick = (e) => { e.preventDefault(); if (window.openImageModal) window.openImageModal(url); };
-        link.classList.remove('potential-image');
-    }).catch(err => console.debug('Image check failed for URL:', url, err));
-}
-
-/**
- * Shared helper to append/refresh embed elements into a groupContent element.
- */
-function _processEmbedLinks(embedLinks, groupContent) {
-    // Remove any stale embeds (used by updateMessageContent path)
-    groupContent.querySelectorAll('.embed-container').forEach(e => e.remove());
-
-    for (const url of embedLinks) {
-        if (url in state._embedCache) {
-            const cachedEl = state._embedCache[url];
-            if (cachedEl) {
-                const cloned = cachedEl.cloneNode(true);
-                const thumbnail = cloned.querySelector('.youtube-thumbnail');
-                if (thumbnail) {
-                    const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/)?.[1];
-                    const container = thumbnail.closest('.youtube-embed');
-                    if (container && videoId) {
-                        thumbnail.addEventListener('click', () => {
-                            container.innerHTML = '';
-                            const iframeWrapper = document.createElement('div');
-                            iframeWrapper.className = 'youtube-iframe';
-                            const iframe = document.createElement('iframe');
-                            iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-                            iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
-                            iframe.allowFullscreen = true;
-                            iframeWrapper.appendChild(iframe);
-                            container.appendChild(iframeWrapper);
-                        });
-                    }
-                }
-                groupContent.appendChild(cloned);
-            }
-        } else {
-            createEmbed(url).then(embedEl => {
-                state._embedCache[url] = embedEl ? embedEl.cloneNode(true) : null;
-                if (embedEl) groupContent.appendChild(embedEl);
-            });
-        }
-    }
-}
-
 function updateMessageContent(msgId, newContent) {
     const wrapper = document.querySelector(`[data-msg-id="${msgId}"]`);
     if (!wrapper) return;
@@ -2762,7 +2692,7 @@ function updateMessageContent(msgId, newContent) {
         }
     });
 
-    if (embedLinks.length === 1 && embedLinks[0].match(/tenor\.com\/view\/[\w-]+-\d+(?:\?.*)?$/i) && msg.content.trim() === embedLinks[0]) {
+    if (embedLinks.length === 1 && isTenorOnlyMessage(embedLinks, msg.content)) {
         msgText.style.display = 'none';
     } else {
         msgText.style.display = '';
@@ -3009,7 +2939,7 @@ function makeMessageElement(msg, isSameUserRecent) {
     const embedLinks = [];
     msgText.innerHTML = parseMsg(msg, embedLinks);
 
-    if (embedLinks.length === 1 && embedLinks[0].match(/tenor\.com\/view\/[\w-]+-\d+(?:\?.*)?$/i) && msg.content.trim() === embedLinks[0]) {
+    if (embedLinks.length === 1 && isTenorOnlyMessage(embedLinks, msg.content)) {
         msgText.style.display = 'none';
     } else {
         msgText.style.display = '';
