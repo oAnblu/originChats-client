@@ -102,7 +102,7 @@ function parseMarkdown(text, embedLinks) {
 }
 
 function parseMsg(msg, embedLinks) {
-    let text = replaceShortcodes(msg.content);
+    let text = msg.content;
     text = parseMarkdown(text, embedLinks);
     
     if (typeof DOMPurify === 'undefined' || !DOMPurify.sanitize) {

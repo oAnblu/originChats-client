@@ -149,22 +149,23 @@ async function createTenorEmbed(tenorId, originalUrl) {
         link.rel = 'noopener noreferrer';
         link.onclick = (e) => { e.preventDefault(); if (window.openImageModal) window.openImageModal(gifUrl); };
 
-        const img = document.createElement('img');
-        img.src = proxyImageUrl(gifUrl);
-        const altDiv = document.createElement('div');
-        altDiv.textContent = data[0].content_description || 'Tenor GIF';
-        img.alt = altDiv.innerHTML;
-        img.className = 'tenor-gif';
-        img.loading = 'lazy';
-        img.onerror = () => {
-            const fallback = document.createElement('a');
-            fallback.href = originalUrl;
-            fallback.target = '_blank';
-            fallback.rel = 'noopener noreferrer';
-            fallback.textContent = originalUrl;
-            fallback.className = 'failed-image-link';
-            container.replaceWith(fallback);
-        };
+  const img = document.createElement('img');
+  img.src = proxyImageUrl(gifUrl);
+  const altDiv = document.createElement('div');
+  altDiv.textContent = data[0].content_description || 'Tenor GIF';
+  img.alt = altDiv.innerHTML;
+  img.className = 'tenor-gif';
+  img.loading = 'lazy';
+  if (window.attachImageScrollHandler) window.attachImageScrollHandler(img);
+  img.onerror = () => {
+    const fallback = document.createElement('a');
+    fallback.href = originalUrl;
+    fallback.target = '_blank';
+    fallback.rel = 'noopener noreferrer';
+    fallback.textContent = originalUrl;
+    fallback.className = 'failed-image-link';
+    container.replaceWith(fallback);
+  };
 
         link.appendChild(img);
         wrapper.appendChild(link);
@@ -215,20 +216,21 @@ function createImageEmbed(url) {
     link.rel = 'noopener noreferrer';
     link.onclick = (e) => { e.preventDefault(); if (window.openImageModal) window.openImageModal(url); };
 
-    const img = document.createElement('img');
-    img.src = proxyImageUrl(url);
-    img.alt = 'Embedded image';
-    img.className = 'message-image';
-    img.loading = 'lazy';
-    img.onerror = () => {
-        const fallback = document.createElement('a');
-        fallback.href = url;
-        fallback.target = '_blank';
-        fallback.rel = 'noopener noreferrer';
-        fallback.textContent = url;
-        fallback.className = 'failed-image-link';
-        container.replaceWith(fallback);
-    };
+  const img = document.createElement('img');
+  img.src = proxyImageUrl(url);
+  img.alt = 'Embedded image';
+  img.className = 'message-image';
+  img.loading = 'lazy';
+  if (window.attachImageScrollHandler) window.attachImageScrollHandler(img);
+  img.onerror = () => {
+    const fallback = document.createElement('a');
+    fallback.href = url;
+    fallback.target = '_blank';
+    fallback.rel = 'noopener noreferrer';
+    fallback.textContent = url;
+    fallback.className = 'failed-image-link';
+    container.replaceWith(fallback);
+  };
 
     link.appendChild(img);
     wrapper.appendChild(link);
@@ -268,7 +270,7 @@ async function createGitHubCommitEmbed(owner, repo, sha, originalUrl) {
 
         const header = _createGitHubHeader(
             originalUrl,
-            `${owner}/${repo}@${sha.slice(0,7)}`,
+            `${owner}/${repo}@${sha.slice(0, 7)}`,
             "Commit"
         );
         content.appendChild(header);
@@ -415,12 +417,14 @@ function _processPotentialImageLink(link, groupContent) {
         const wrapper = document.createElement('div');
         wrapper.className = 'chat-image-wrapper';
 
-        const img = document.createElement('img');
-        img.src = proxyImageUrl(url);
-        img.alt = 'image';
-        img.className = 'message-image';
+    const img = document.createElement('img');
+    img.src = proxyImageUrl(url);
+    img.alt = 'image';
+    img.className = 'message-image';
 
-        if (window.createFavButton) {
+    if (window.attachImageScrollHandler) window.attachImageScrollHandler(img);
+
+    if (window.createFavButton) {
             const favBtn = window.createFavButton(url, url);
             wrapper.appendChild(favBtn);
             if (window.lucide) setTimeout(() => window.lucide.createIcons({ root: favBtn }), 0);

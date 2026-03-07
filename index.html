@@ -18,9 +18,15 @@
     <link rel="dns-prefetch" href="https://api.rotur.dev">
     <link rel="stylesheet" href="style.css">
     <link rel="preload" href="settings.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="settings.css"></noscript>
-    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"></noscript>
+    <noscript>
+        <link rel="stylesheet" href="settings.css">
+    </noscript>
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+        as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+        <link rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    </noscript>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" defer></script>
 </head>
 
@@ -84,6 +90,9 @@
                 </div>
                 <div id="dm-friends-container" style="display: none;" class="dm-friends-container"></div>
                 <div id="messages" class="messages"></div>
+                <button id="scroll-to-bottom" class="scroll-to-bottom-btn" style="display: none;">
+                    <i data-lucide="arrow-down"></i>
+                </button>
                 <div id="typing" class="typing"></div>
                 <div class="input-area">
                     <div id="reply-bar" class="reply-bar">
@@ -928,16 +937,18 @@
         <script src="markdown.js" defer></script>
         <script src="interactions.js" defer></script>
         <script src="uploads.js" defer></script>
-        <script src="notes-channel.js" defer></script>
-        <script src="channels.js" defer></script>
-        <script src="voice.js" defer></script>
-        <script src="members-content.js" defer></script>
-        <script src="script.js" defer></script>
+<script src="notes-channel.js" defer></script>
+<script src="channels.js" defer></script>
+<script src="voice.js" defer></script>
+<script src="members-content.js" defer></script>
+<script src="guilds.js" defer></script>
+<script src="script.js" defer></script>
         <script src="serverSettings.js" defer></script>
 
         <!-- Highlight.js with auto-detection -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"
+            defer></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js" defer></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js" defer></script>
 

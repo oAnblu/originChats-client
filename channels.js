@@ -170,43 +170,48 @@ function createNewMessageElement() {
 }
 
 function createTextChannelElement(channel, index) {
-    const div = document.createElement('div');
-    div.className = 'channel-item channel-text';
-    div.dataset.channelName = channel.name;
+  const div = document.createElement('div');
+  div.className = 'channel-item channel-text';
+  div.dataset.channelName = channel.name;
 
-    const icon = document.createElement('i');
-    icon.setAttribute('data-lucide', 'hash');
-    icon.style.width = '18px';
-    icon.style.height = '18px';
-    icon.style.marginRight = '8px';
-    icon.style.color = 'var(--text-dim)';
+  const icon = document.createElement('i');
+  icon.setAttribute('data-lucide', 'hash');
+  icon.style.width = '18px';
+  icon.style.height = '18px';
+  icon.style.marginRight = '8px';
+  icon.style.color = 'var(--text-dim)';
+  div.appendChild(icon);
+
+  if (channel.icon) {
+    const icon = document.createElement('img');
+    icon.src = channel.icon;
+    icon.style.width = '25px';
+    icon.style.height = '25px';
+    icon.style.marginRight = '4px';
+    icon.style.borderRadius = '50%';
+    icon.style.objectFit = 'contain';
     div.appendChild(icon);
+  }
 
-    if (channel.icon) {
-        const icon = document.createElement('img');
-        icon.src = channel.icon;
-        icon.style.width = '25px';
-        icon.style.height = '25px';
-        icon.style.marginRight = '4px';
-        icon.style.borderRadius = '50%';
-        icon.style.objectFit = 'contain';
-        div.appendChild(icon);
-    }
+  const name = document.createElement('span');
+  name.textContent = getChannelDisplayName(channel);
+  name.dataset.channelName = channel.name;
+  div.appendChild(name);
 
-    const name = document.createElement('span');
-    name.textContent = getChannelDisplayName(channel);
-    name.dataset.channelName = channel.name;
-    div.appendChild(name);
+  addChannelIndicators(div, channel);
 
-    addChannelIndicators(div, channel);
+  div.onclick = () => {
+    selectChannel(channel);
+    closeMenu();
+  };
 
-    div.onclick = () => {
-        selectChannel(channel);
-        closeMenu();
-    };
+  div.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    showChannelContextMenu(e, channel);
+  });
 
-    updateChannelActiveState(div, channel.name, index);
-    return div;
+  updateChannelActiveState(div, channel.name, index);
+  return div;
 }
 
 function createVoiceChannelElement(channel, index) {
@@ -509,14 +514,8 @@ function updateChannelActiveState(element, channelName, index) {
 }
 
 function addChannelIndicators(element, channel) {
-    const isActive = state.currentChannel?.name === channel.name;
+    const { isActive, hasUnread, hasPings } = getChannelNotificationState(channel);
     if (isActive) return;
-
-    const channelKey = `${state.serverUrl}:${channel.name}`;
-    const hasOldUnread = state.unreadByChannel[channelKey] > 0;
-    const hasNewUnread = typeof isChannelUnread === 'function' && isChannelUnread(channel, state.serverUrl);
-    const hasUnread = hasOldUnread || hasNewUnread;
-    const hasPings = state.unreadPings[channel.name] > 0;
 
     let badge = element.querySelector('.ping-badge');
     let unreadIndicator = element.querySelector('.unread-indicator');
@@ -560,13 +559,7 @@ function addChannelIndicators(element, channel) {
 }
 
 function updateChannelIndicators(element, channel) {
-    const isActive = state.currentChannel?.name === channel.name;
-    
-    const channelKey = `${state.serverUrl}:${channel.name}`;
-    const hasOldUnread = state.unreadByChannel[channelKey] > 0;
-    const hasNewUnread = typeof isChannelUnread === 'function' && isChannelUnread(channel, state.serverUrl);
-    const hasUnread = hasOldUnread || hasNewUnread;
-    const hasPings = state.unreadPings[channel.name] > 0;
+    const { isActive, hasUnread, hasPings } = getChannelNotificationState(channel);
 
     let badge = element.querySelector('.ping-badge');
     let unreadIndicator = element.querySelector('.unread-indicator');
@@ -628,4 +621,16 @@ function shouldShowTypingIndicator(channelName) {
 
 function shouldRemoveTypingIndicator(channelName) {
     return !shouldShowTypingIndicator(channelName);
+}
+
+function getChannelNotificationState(channel) {
+    const isActive = state.currentChannel?.name === channel.name;
+    
+    const channelKey = `${state.serverUrl}:${channel.name}`;
+    const hasOldUnread = state.unreadByChannel[channelKey] > 0;
+    const hasNewUnread = typeof isChannelUnread === 'function' && isChannelUnread(channel, state.serverUrl);
+    const hasUnread = hasOldUnread || hasNewUnread;
+    const hasPings = state.unreadPings[channel.name] > 0;
+
+    return { isActive, hasUnread, hasPings };
 }

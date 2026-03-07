@@ -755,11 +755,7 @@ window.hideErrorBanner = hideErrorBanner;
 function updateGuildActiveState() {
     document.querySelectorAll('.guild-item').forEach(item => {
         item.classList.toggle('active', item.dataset.url === state.serverUrl);
-    });
-}
-
-function showHome() {
-    if (state.serverUrl !== 'dms.mistium.com') switchServer('dms.mistium.com');
+  });
 }
 
 async function fetchAccountProfile(username) {
@@ -1041,10 +1037,6 @@ function isEmojiOnly(content) {
 
 window.openAccountModal = openAccountModal;
 window.closeAccountModal = closeAccountModal;
-window.renderGuildSidebar = renderGuildSidebar;
-window.updateGuildActiveState = updateGuildActiveState;
-window.leaveServer = leaveServer;
-window.showHome = showHome;
 window.updateAccountProfileStatusIndicator = updateAccountProfileStatusIndicator;
 window.openDiscoveryModal = openDiscoveryModal;
 window.closeDiscoveryModal = closeDiscoveryModal;
@@ -1056,274 +1048,81 @@ window.rejectFriendRequest = rejectFriendRequest;
 window.unblockUser = unblockUser;
 
 function toggleServerDropdown() {
-    const dropdown = document.getElementById('server-dropdown');
-    const arrow = document.getElementById('dropdown-arrow');
-    dropdown.classList.toggle('active');
-    arrow.classList.toggle('open');
-    if (dropdown.classList.contains('active')) renderServerDropdown();
+  const dropdown = document.getElementById('server-dropdown');
+  const arrow = document.getElementById('dropdown-arrow');
+  dropdown.classList.toggle('active');
+  arrow.classList.toggle('open');
+  if (dropdown.classList.contains('active')) renderServerDropdown();
 }
 
 function closeServerDropdown() {
-    const dropdown = document.getElementById('server-dropdown');
-    const arrow = document.getElementById('dropdown-arrow');
-    if (dropdown) dropdown.classList.remove('active');
-    if (arrow) arrow.classList.remove('open');
-}
-
-async function reorderServers(draggedUrl, targetUrl) {
-    const draggedIndex = state.servers.findIndex(s => s.url === draggedUrl);
-    const targetIndex = state.servers.findIndex(s => s.url === targetUrl);
-    if (draggedIndex === -1 || targetIndex === -1) return;
-    const [draggedServer] = state.servers.splice(draggedIndex, 1);
-    state.servers.splice(targetIndex, 0, draggedServer);
-    await saveServers();
-    renderGuildSidebar();
-}
-
-function renderGuildSidebar() {
-    const guildList = document.getElementById('guild-list');
-    const homeGuild = guildList.querySelector('.home-guild');
-    guildList.innerHTML = '';
-
-    const addGuildSeparator = () => {
-        const div = document.createElement('div');
-        div.className = 'guild-divider';
-        guildList.appendChild(div);
-    };
-
-    if (homeGuild) {
-        homeGuild.classList.toggle('active', state.serverUrl === 'dms.mistium.com');
-
-        const homeIcon = homeGuild.querySelector('.guild-icon');
-        const dmConn = wsConnections['dms.mistium.com'];
-        const existingWarning = homeGuild.querySelector('.guild-warning');
-
-        if (dmConn && dmConn.status === 'error') {
-            homeGuild.classList.add('server-error');
-            if (!existingWarning) {
-                const w = createGuildWarningIcon();
-                homeIcon.style.position = 'relative';
-                homeGuild.appendChild(w);
-            }
-        } else {
-            homeGuild.classList.remove('server-error');
-            if (existingWarning) existingWarning.remove();
-        }
-
-        const homePill = homeGuild.querySelector('.guild-pill');
-        if (homePill) homePill.classList.toggle('unread', state.unreadCountsByServer['dms.mistium.com'] > 0 || hasServerUnread('dms.mistium.com'));
-
-        const existingPing = homeGuild.querySelector('.guild-ping');
-        if (state.serverPingsByServer['dms.mistium.com'] > 0) {
-            if (!existingPing) {
-                const pingIcon = document.createElement('div');
-                pingIcon.className = 'guild-ping';
-                pingIcon.innerHTML = '<i data-lucide="at-sign"></i>';
-                homeIcon.style.position = 'relative';
-                homeGuild.appendChild(pingIcon);
-            }
-        } else if (existingPing) {
-            existingPing.remove();
-        }
-
-        guildList.appendChild(homeGuild);
-    }
-
-    if (state.dmServers && state.dmServers.length > 0) {
-        state.dmServers.forEach(dmServer => {
-            const item = document.createElement('div');
-            item.className = 'guild-item dm-server';
-            item.dataset.channel = dmServer.channel;
-            item.title = dmServer.name;
-            if (state.serverUrl === 'dms.mistium.com' && state.currentChannel?.name === dmServer.channel) {
-                item.classList.add('active');
-            }
-
-            const icon = document.createElement('div');
-            icon.className = 'guild-icon';
-            const img = document.createElement('img');
-            img.src = `https://avatars.rotur.dev/${dmServer.username}`;
-            img.alt = dmServer.name;
-            img.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
-            icon.appendChild(img);
-
-            const pill = document.createElement('div');
-            pill.className = 'guild-pill';
-            const channelKey = `dms.mistium.com:${dmServer.channel}`;
-            const channels = state.channelsByServer['dms.mistium.com'] || [];
-            const dmChannel = channels.find(c => c.name === dmServer.channel);
-            const hasTimestampUnread = dmChannel && typeof isChannelUnread === 'function' && isChannelUnread(dmChannel, 'dms.mistium.com');
-            if (state.unreadByChannel[channelKey] > 0 || hasTimestampUnread) pill.classList.add('unread');
-
-            item.appendChild(icon);
-            item.appendChild(pill);
-
-            item.onclick = () => {
-                state.dmServers = state.dmServers.filter(dm => dm.channel !== dmServer.channel);
-                localStorage.setItem('originchats_dm_servers', JSON.stringify(state.dmServers));
-                renderGuildSidebar();
-                if (state.serverUrl !== 'dms.mistium.com') switchServer('dms.mistium.com');
-                setTimeout(() => {
-                    const channels = state.channelsByServer['dms.mistium.com'] || [];
-                    const channel = channels.find(c => c.name === dmServer.channel);
-                    if (channel) {
-                        selectChannel(channel);
-                    } else {
-                        state.pendingMessageFetchesByChannel[`dms.mistium.com:${dmServer.channel}`] = true;
-                        wsSend({ cmd: 'messages_get', channel: dmServer.channel }, 'dms.mistium.com');
-                        const tempChannel = { name: dmServer.channel, display_name: dmServer.name, type: 'text', icon: `https://avatars.rotur.dev/${dmServer.username}` };
-                        if (!state.channelsByServer['dms.mistium.com']) state.channelsByServer['dms.mistium.com'] = [];
-                        if (!state.channelsByServer['dms.mistium.com'].find(c => c.name === dmServer.channel)) {
-                            state.channelsByServer['dms.mistium.com'].push(tempChannel);
-                        }
-                        selectChannel(tempChannel);
-                    }
-                }, 100);
-            };
-
-            item.addEventListener('contextmenu', (e) => { e.preventDefault(); showDMContextMenu(e, dmServer); });
-            guildList.appendChild(item);
-        });
-    }
-
-    addGuildSeparator();
-
-    state.servers.forEach((server, index) => {
-        const item = document.createElement('div');
-        item.className = 'guild-item';
-        if (server.url === state.serverUrl) item.classList.add('active');
-        item.dataset.url = server.url;
-        item.dataset.index = index;
-        item.draggable = true;
-
-        const icon = document.createElement('div');
-        icon.className = 'guild-icon';
-
-        if (server.icon) {
-            const img = document.createElement('img');
-            img.src = server.icon;
-            img.alt = server.name;
-            icon.appendChild(img);
-        } else {
-            const initials = document.createElement('span');
-            initials.textContent = server.name.substring(0, 2).toUpperCase();
-            initials.style.cssText = 'font-weight: 600; font-size: 18px; color: #fff;';
-            icon.appendChild(initials);
-        }
-
-        const conn = wsConnections[server.url];
-        if (conn && conn.status === 'error') {
-            item.classList.add('server-error');
-            item.title = `${server.name} (Not responding - click to reconnect)`;
-            const w = createGuildWarningIcon();
-            // Adjust icon size for server items
-            const i = w.querySelector('i');
-            if (i) { i.style.width = '12px'; i.style.height = '12px'; i.style.color = 'white'; }
-            icon.style.position = 'relative';
-            item.appendChild(w);
-        } else {
-            item.title = server.name;
-        }
-
-        const pill = document.createElement('div');
-        pill.className = 'guild-pill';
-        if (state.unreadCountsByServer[server.url] > 0 || hasServerUnread(server.url)) pill.classList.add('unread');
-
-        item.appendChild(icon);
-        item.appendChild(pill);
-
-        if (state.serverPingsByServer[server.url] > 0) {
-            const pingIcon = document.createElement('div');
-            pingIcon.className = 'guild-ping';
-            pingIcon.innerHTML = '<i data-lucide="at-sign"></i>';
-            icon.style.position = 'relative';
-            item.appendChild(pingIcon);
-        }
-
-        item.addEventListener('dragstart', (e) => {
-            item.classList.add('dragging');
-            e.dataTransfer.setData('text/plain', server.url);
-            e.dataTransfer.effectAllowed = 'move';
-        });
-        item.addEventListener('dragend', () => {
-            item.classList.remove('dragging');
-            document.querySelectorAll('.guild-item.drag-over').forEach(el => el.classList.remove('drag-over'));
-        });
-        item.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            item.classList.add('drag-over');
-        });
-        item.addEventListener('drop', (e) => {
-            e.preventDefault();
-            const draggedUrl = e.dataTransfer.getData('text/plain');
-            if (draggedUrl !== server.url) reorderServers(draggedUrl, server.url);
-            item.classList.remove('drag-over');
-        });
-        item.onclick = (e) => { if (e.detail !== 0 && !e.type.includes('drag')) switchServer(server.url); };
-        item.addEventListener('contextmenu', (e) => { e.preventDefault(); showGuildContextMenu(e, server); });
-
-        guildList.appendChild(item);
-    });
-
-    addGuildSeparator();
-
-    const addGuildButton = document.createElement('div');
-    addGuildButton.className = 'guild-item add-guild';
-    addGuildButton.onclick = addNewServer;
-    addGuildButton.title = 'Add a Server';
-    const addGuildIcon = document.createElement('div');
-    addGuildIcon.className = 'guild-icon';
-    addGuildIcon.innerHTML = '<i data-lucide="plus"></i>';
-    addGuildButton.appendChild(addGuildIcon);
-    guildList.appendChild(addGuildButton);
-
-    const discoverGuildButton = document.createElement('div');
-    discoverGuildButton.className = 'guild-item discover-guild';
-    discoverGuildButton.onclick = openDiscoveryModal;
-    discoverGuildButton.title = 'Discover Servers';
-    const discoverGuildIcon = document.createElement('div');
-    discoverGuildIcon.className = 'guild-icon';
-    discoverGuildIcon.innerHTML = '<i data-lucide="compass"></i>';
-    discoverGuildButton.appendChild(discoverGuildIcon);
-    guildList.appendChild(discoverGuildButton);
-
-    if (window.lucide) window.lucide.createIcons({ root: guildList });
+  const dropdown = document.getElementById('server-dropdown');
+  const arrow = document.getElementById('dropdown-arrow');
+  if (dropdown) dropdown.classList.remove('active');
+  if (arrow) arrow.classList.remove('open');
 }
 
 function isMobile() {
-    return window.matchMedia('(max-width: 768px)').matches || 'ontouchstart' in window;
+  return window.matchMedia('(max-width: 768px)').matches || 'ontouchstart' in window;
 }
 
-function showGuildContextMenu(event, server) {
-    showContextMenu(event, [
-        { label: 'Copy URL', icon: 'copy', callback: () => navigator.clipboard.writeText(server.url) },
-        { label: 'Leave Server', icon: 'log-out', danger: true, callback: () => leaveServer(server.url) }
-    ]);
+function markChannelAsRead(channel, serverUrl) {
+  const targetUrl = serverUrl || state.serverUrl;
+
+  if (!state.readTimesByServer[targetUrl]) {
+    state.readTimesByServer[targetUrl] = {};
+  }
+
+  if (channel.last_message) {
+    state.readTimesByServer[targetUrl][channel.name] = channel.last_message;
+  }
+
+  const channelKey = `${targetUrl}:${channel.name}`;
+  if (state.unreadByChannel[channelKey]) {
+    state.unreadCountsByServer[targetUrl] = Math.max(0, (state.unreadCountsByServer[targetUrl] || 0) - state.unreadByChannel[channelKey]);
+    delete state.unreadByChannel[channelKey];
+  }
+
+  if (state.unreadPings[channel.name]) delete state.unreadPings[channel.name];
+  if (state.unreadReplies[channel.name]) delete state.unreadReplies[channel.name];
+
+  saveReadTimes();
+  renderChannels();
 }
 
-async function leaveServer(url) {
-    if (!confirm('Leave this server?')) return;
-    wsSend({ cmd: 'leave' }, url);
-    state.servers = state.servers.filter(s => s.url !== url);
-    await saveServers();
+function markDMAsRead(dmServer) {
+  const serverUrl = 'dms.mistium.com';
 
-    closeWebSocket(url);
+  if (!state.readTimesByServer[serverUrl]) {
+    state.readTimesByServer[serverUrl] = {};
+  }
 
-    delete state.channelsByServer[url];
-    delete state.messagesByServer[url];
-    delete state.pingsByServer[url];
-    delete state.usersByServer[url];
-    delete state.currentUserByServer[url];
+  if (dmServer.last_message) {
+    state.readTimesByServer[serverUrl][dmServer.channel] = dmServer.last_message;
+  }
 
-    if (state.serverUrl === url) {
-        if (state.servers.length > 0) {
-            switchServer(state.servers[0].url);
-        } else {
-            Object.keys(wsConnections).forEach(key => closeWebSocket(key));
-        }
-    }
-    renderGuildSidebar();
+  const channelKey = `${serverUrl}:${dmServer.channel}`;
+  if (state.unreadByChannel[channelKey]) {
+    state.unreadCountsByServer[serverUrl] = Math.max(0, (state.unreadCountsByServer[serverUrl] || 0) - state.unreadByChannel[channelKey]);
+    delete state.unreadByChannel[channelKey];
+  }
+
+  if (state.unreadPings[dmServer.channel]) delete state.unreadPings[dmServer.channel];
+  if (state.unreadReplies[dmServer.channel]) delete state.unreadReplies[dmServer.channel];
+
+  saveReadTimes();
+  renderGuildSidebar();
+}
+
+function showChannelContextMenu(event, channel) {
+  const serverUrl = state.serverUrl;
+  const isUnread = isChannelUnread(channel, serverUrl) || state.unreadByChannel[`${serverUrl}:${channel.name}`] > 0;
+
+  showContextMenu(event, [
+    { label: 'Mark as Read', icon: 'check-circle', callback: () => markChannelAsRead(channel, serverUrl) },
+    'separator',
+    { label: 'Copy Channel Name', icon: 'copy', callback: () => navigator.clipboard.writeText(channel.name) }
+  ]);
 }
 
 function renderServerDropdown() {
@@ -1488,15 +1287,13 @@ function switchServer(url) {
     const channelHeaderName = document.getElementById('channel-header-name');
     const serverChannelHeader = document.getElementById('server-channel-header');
 
-    if (url === 'dms.mistium.com') {
-        if (serverChannelHeader) serverChannelHeader.style.display = 'none';
-        fetchMyAccountData();
-        selectHomeChannel();
-        const dmFriendsContainer = document.getElementById('dm-friends-container');
-        const messagesEl = document.getElementById('messages');
-        if (dmFriendsContainer) dmFriendsContainer.style.display = 'none';
-        if (messagesEl) messagesEl.style.display = 'none';
-    } else {
+if (url === 'dms.mistium.com') {
+  if (serverChannelHeader) serverChannelHeader.style.display = 'none';
+  fetchMyAccountData();
+  selectHomeChannel();
+  const dmFriendsContainer = document.getElementById('dm-friends-container');
+  if (dmFriendsContainer) dmFriendsContainer.style.display = 'none';
+} else {
         if (serverChannelHeader) serverChannelHeader.style.display = 'flex';
         if (channelHeaderName) channelHeaderName.parentElement.style.display = 'flex';
         const addBtn = document.getElementById('channel-add-btn');
@@ -1844,27 +1641,38 @@ async function handleMessage(msg, serverUrl) {
             wsSend({ cmd: 'users_online' }, serverUrl);
             break;
 
-        case 'channels_get':
-            console.log('[DEBUG] channels_get received for server:', serverUrl, 'msg.val:', msg.val);
-            state.channelsByServer[serverUrl] = msg.val;
-            state.loadingChannelsByServer[serverUrl] = false;
-            renderGuildSidebar();
-            if (state.serverUrl === serverUrl) {
-                renderChannels();
-                if (!state.currentChannel && state.channels.length > 0 && serverUrl !== 'dms.mistium.com') {
-                    const lastChannelName = state.lastChannelByServer[serverUrl];
-                    const lastChannel = lastChannelName ? state.channels.find(c => c.name === lastChannelName) : null;
-                    selectChannel(lastChannel || state.channels[0]);
-                }
-                if (serverUrl === 'dms.mistium.com' && !state.currentChannel) selectHomeChannel();
-                if (state.pendingChannelSelectsByServer[serverUrl] && serverUrl !== 'dms.mistium.com') {
-                    const pendingChannel = state.pendingChannelSelectsByServer[serverUrl];
-                    delete state.pendingChannelSelectsByServer[serverUrl];
-                    const actualChannel = state.channels.find(c => c.name === pendingChannel.name);
-                    if (actualChannel) selectChannel(actualChannel);
-                }
-            }
-            break;
+case 'channels_get':
+  console.log('[DEBUG] channels_get received for server:', serverUrl, 'msg.val:', msg.val);
+  state.channelsByServer[serverUrl] = msg.val;
+  state.loadingChannelsByServer[serverUrl] = false;
+
+  if (!state.readTimesByServer[serverUrl]) {
+    state.readTimesByServer[serverUrl] = {};
+  }
+  
+  msg.val.forEach(channel => {
+    if (channel.last_message && state.readTimesByServer[serverUrl][channel.name] === undefined) {
+      state.readTimesByServer[serverUrl][channel.name] = 0;
+    }
+  });
+
+  renderGuildSidebar();
+  if (state.serverUrl === serverUrl) {
+    renderChannels();
+    if (!state.currentChannel && state.channels.length > 0 && serverUrl !== 'dms.mistium.com') {
+      const lastChannelName = state.lastChannelByServer[serverUrl];
+      const lastChannel = lastChannelName ? state.channels.find(c => c.name === lastChannelName) : null;
+      selectChannel(lastChannel || state.channels[0]);
+    }
+    if (serverUrl === 'dms.mistium.com' && !state.currentChannel) selectHomeChannel();
+    if (state.pendingChannelSelectsByServer[serverUrl] && serverUrl !== 'dms.mistium.com') {
+      const pendingChannel = state.pendingChannelSelectsByServer[serverUrl];
+      delete state.pendingChannelSelectsByServer[serverUrl];
+      const actualChannel = state.channels.find(c => c.name === pendingChannel.name);
+      if (actualChannel) selectChannel(actualChannel);
+    }
+  }
+  break;
 
         case 'users_list':
             if (!state.usersByServer[serverUrl]) state.usersByServer[serverUrl] = {};
@@ -1946,22 +1754,31 @@ async function handleMessage(msg, serverUrl) {
             break;
         }
 
-        case 'message_new':
-            if (!state.messagesByServer[serverUrl] || !state.messagesByServer[serverUrl][msg.channel]) return;
-            state.messagesByServer[serverUrl][msg.channel].push(msg.message);
+case 'message_new':
+  if (!state.messagesByServer[serverUrl] || !state.messagesByServer[serverUrl][msg.channel]) return;
+  state.messagesByServer[serverUrl][msg.channel].push(msg.message);
 
-            if (state.serverUrl !== serverUrl || msg.channel !== state.currentChannel?.name) {
-                if (!state.unreadCountsByServer[serverUrl]) state.unreadCountsByServer[serverUrl] = 0;
-                state.unreadCountsByServer[serverUrl]++;
-                const channelKey = `${serverUrl}:${msg.channel}`;
-                if (!state.unreadByChannel[channelKey]) state.unreadByChannel[channelKey] = 0;
-                state.unreadByChannel[channelKey]++;
-                if (serverUrl === 'dms.mistium.com' && msg.message.user !== state.currentUser?.username) {
-                    addDMServer(msg.message.user, msg.channel);
-                }
-                if (state.serverUrl === serverUrl) requestAnimationFrame(() => renderChannels());
-                renderGuildSidebar();
-            }
+  const channels = state.channelsByServer[serverUrl];
+  if (channels) {
+    const channel = channels.find(c => c.name === msg.channel);
+    if (channel && msg.message.timestamp) {
+      channel.last_message = msg.message.timestamp;
+    }
+  }
+
+  if (state.serverUrl !== serverUrl || msg.channel !== state.currentChannel?.name) {
+    if (!state.unreadCountsByServer[serverUrl]) state.unreadCountsByServer[serverUrl] = 0;
+    state.unreadCountsByServer[serverUrl]++;
+    const channelKey = `${serverUrl}:${msg.channel}`;
+    if (!state.unreadByChannel[channelKey]) state.unreadByChannel[channelKey] = 0;
+    state.unreadByChannel[channelKey]++;
+    if (serverUrl === 'dms.mistium.com' && msg.message.user !== state.currentUser?.username) {
+      addDMServer(msg.message.user, msg.channel);
+      playPingSound();
+    }
+    if (state.serverUrl === serverUrl) requestAnimationFrame(() => renderChannels());
+    renderGuildSidebar();
+  }
 
             {
                 const typingServer = state.typingUsersByServer[serverUrl];
@@ -2335,13 +2152,25 @@ async function selectChannel(channel) {
         if (key !== channelKey && key.startsWith(`${state.serverUrl}:`)) delete state.pendingMessageFetchesByChannel[key];
     });
 
-    if (state.unreadByChannel[channelKey]) {
-        state.unreadCountsByServer[state.serverUrl] = Math.max(0, (state.unreadCountsByServer[state.serverUrl] || 0) - state.unreadByChannel[channelKey]);
-        delete state.unreadByChannel[channelKey];
-        renderGuildSidebar();
-    }
+  if (state.unreadByChannel[channelKey]) {
+    state.unreadCountsByServer[state.serverUrl] = Math.max(0, (state.unreadCountsByServer[state.serverUrl] || 0) - state.unreadByChannel[channelKey]);
+    delete state.unreadByChannel[channelKey];
+    renderGuildSidebar();
+  }
 
-    renderChannels();
+  if (state.serverUrl === 'dms.mistium.com') {
+    const ignoredChannels = ['home', 'relationships', 'notes', 'cmds', 'new_message'];
+    if (!ignoredChannels.includes(channel.name)) {
+      const initialLength = state.dmServers.length;
+      state.dmServers = state.dmServers.filter(dm => dm.channel !== channel.name);
+      if (state.dmServers.length !== initialLength) {
+        localStorage.setItem('originchats_dm_servers', JSON.stringify(state.dmServers));
+        renderGuildSidebar();
+      }
+    }
+  }
+
+  renderChannels();
 
     document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
     const targetItem = Array.from(document.querySelectorAll('.channel-item')).find(el => el.querySelector('[data-channel-name]')?.textContent === channel.name);
@@ -2619,6 +2448,34 @@ state._olderLoading = false;
 state._olderStart = {};
 state._olderCooldown = {};
 
+function scrollToBottom() {
+  const container = document.getElementById('messages');
+  if (!container) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+      updateScrollButton();
+    });
+  });
+}
+
+function updateScrollButton() {
+  const scrollBtn = document.getElementById('scroll-to-bottom');
+  const container = document.getElementById('messages');
+  if (!scrollBtn || !container) return;
+  const isNearBottom = (container.scrollHeight - (container.scrollTop + container.clientHeight)) < 80;
+  scrollBtn.style.display = isNearBottom ? 'none' : 'flex';
+}
+
+function attachImageScrollHandler(img) {
+  const handler = () => scrollToBottom();
+  img.addEventListener('load', handler, { once: true });
+  img.addEventListener('error', handler, { once: true });
+}
+
+window.scrollToBottom = scrollToBottom;
+window.attachImageScrollHandler = attachImageScrollHandler;
+
 function updateAllTimestamps() {
     document.querySelectorAll('[data-timestamp]').forEach(el => {
         const timestamp = parseInt(el.dataset.timestamp);
@@ -2644,7 +2501,7 @@ function getDaySeparator(timestamp) {
     return separator;
 }
 
-async function renderMessages(scrollToBottom = true) {
+async function renderMessages(shouldScrollToBottom = true) {
     if (state.renderInProgress) return;
     state.renderInProgress = true;
 
@@ -2712,70 +2569,56 @@ async function renderMessages(scrollToBottom = true) {
         lastUser = msg.user; lastTime = msg.timestamp;
     }
 
-    if (fragment.childNodes.length > 0) container.appendChild(fragment);
+  if (fragment.childNodes.length > 0) container.appendChild(fragment);
 
-    const scrollBottom = () => { container.scrollTop = container.scrollHeight; };
-    const nearBottom = () => (container.scrollHeight - (container.scrollTop + container.clientHeight)) < 80;
+  if (shouldScrollToBottom || isInitialRender) {
+    scrollToBottom();
+    let observer;
+    try {
+      observer = new MutationObserver(() => { if (!state._olderLoading) scrollToBottom(); });
+      observer.observe(container, { childList: true, subtree: true });
+    } catch { }
+    container.querySelectorAll('img').forEach(img => {
+      if (!img.complete) {
+        attachImageScrollHandler(img);
+      }
+    });
+    setTimeout(() => { if (observer) observer.disconnect(); }, 2000);
+  }
 
-    if (scrollToBottom || isInitialRender) {
-        scrollBottom();
-        let observer;
-        try {
-            observer = new MutationObserver(() => { if (!state._olderLoading && nearBottom()) scrollBottom(); });
-            observer.observe(container, { childList: true, subtree: true });
-        } catch { }
-        container.querySelectorAll('img').forEach(img => {
-            if (!img.complete) {
-                const handler = () => { if (!state._olderLoading && nearBottom()) scrollBottom(); };
-                img.addEventListener('load', handler, { once: true });
-                img.addEventListener('error', handler, { once: true });
-            }
-        });
-        setTimeout(() => { if (observer) observer.disconnect(); }, 2000);
-    }
-
-    setupImageLazyLoading(container);
-    updateTypingIndicator();
-    state.renderInProgress = false;
+  setupImageLazyLoading(container);
+  updateTypingIndicator();
+  state.renderInProgress = false;
 }
 
 function appendMessage(msg) {
-    if (!state.currentChannel || state.renderInProgress) return;
-    const container = document.getElementById("messages");
+  if (!state.currentChannel || state.renderInProgress) return;
+  const container = document.getElementById("messages");
 
-    container.querySelector('.empty-channel-message')?.remove();
+  container.querySelector('.empty-channel-message')?.remove();
 
-    const messages = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name] || [];
-    const prevMsg = messages.length > 1 ? messages[messages.length - 2] : null;
-    const isSameUserRecent = prevMsg && msg.user === prevMsg.user && msg.timestamp - prevMsg.timestamp < 300;
+  const messages = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name] || [];
+  const prevMsg = messages.length > 1 ? messages[messages.length - 2] : null;
+  const isSameUserRecent = prevMsg && msg.user === prevMsg.user && msg.timestamp - prevMsg.timestamp < 300;
 
-    if (prevMsg) {
-        const prevDate = new Date(prevMsg.timestamp * 1000).toDateString();
-        if (prevDate !== new Date(msg.timestamp * 1000).toDateString()) {
-            lastUser = null; lastTime = 0;
-            container.appendChild(getDaySeparator(msg.timestamp));
-        }
+  if (prevMsg) {
+    const prevDate = new Date(prevMsg.timestamp * 1000).toDateString();
+    if (prevDate !== new Date(msg.timestamp * 1000).toDateString()) {
+      lastUser = null; lastTime = 0;
+      container.appendChild(getDaySeparator(msg.timestamp));
     }
+  }
 
-    const element = makeMessageElement(msg, isSameUserRecent);
-    const wasNearBottom = (container.scrollHeight - (container.scrollTop + container.clientHeight)) < 80;
-    container.appendChild(element);
-    lastUser = msg.user; lastTime = msg.timestamp;
+  const element = makeMessageElement(msg, isSameUserRecent);
+  container.appendChild(element);
+  lastUser = msg.user; lastTime = msg.timestamp;
 
-    // Parse emoji with twemoji
-    if (window.twemoji) {
-        const messageText = element.querySelector('.message-text');
-        if (messageText) window.twemoji.parse(messageText);
-    }
+  if (window.twemoji) {
+    const messageText = element.querySelector('.message-text');
+    if (messageText) window.twemoji.parse(messageText);
+  }
 
-    if (wasNearBottom) {
-        requestAnimationFrame(() => {
-            const prevBehavior = container.style.scrollBehavior;
-            container.style.scrollBehavior = 'auto';
-            container.scrollTop = container.scrollHeight;
-            container.style.scrollBehavior = prevBehavior || '';
-        });
-    }
+  scrollToBottom();
 }
 
 function updateMessageContent(msgId, newContent) {
@@ -2869,6 +2712,7 @@ function makeMessageElement(msg, isSameUserRecent) {
     const wrapper = document.createElement('div');
     wrapper.className = isHead ? 'message-group' + (isReply ? ' has-reply' : '') : 'message-single';
     wrapper.dataset.msgId = msg.id;
+    wrapper.classList.add('message-enter');
 
     if (isHead) {
         if (isReply) {
@@ -4347,15 +4191,19 @@ if (input) {
 }
 
 function showDMContextMenu(event, dmServer) {
-    showContextMenu(event, [
-        {
-            label: 'Remove from sidebar', icon: 'x-circle', callback: () => {
-                state.dmServers = state.dmServers.filter(dm => dm.channel !== dmServer.channel);
-                localStorage.setItem('originchats_dm_servers', JSON.stringify(state.dmServers));
-                renderGuildSidebar();
-            }
-        }
-    ]);
+  showContextMenu(event, [
+    { label: 'Mark as Read', icon: 'check-circle', callback: () => markDMAsRead(dmServer) },
+    'separator',
+    {
+      label: 'Remove from sidebar',
+      icon: 'x-circle',
+      callback: () => {
+        state.dmServers = state.dmServers.filter(dm => dm.channel !== dmServer.channel);
+        localStorage.setItem('originchats_dm_servers', JSON.stringify(state.dmServers));
+        renderGuildSidebar();
+      }
+    }
+  ]);
 }
 
 function openDMCreateModal() {
@@ -4673,9 +4521,9 @@ function initAppearanceSettings() {
 }
 
 function applyMessageGrouping(enabled) {
-    document.body.classList.toggle('no-message-grouping', !enabled);
-    const messages = state.messagesByServer[state.serverUrl]?.[state.currentChannel?.name];
-    if (messages) renderMessages(messages, false);
+  document.body.classList.toggle('no-message-grouping', !enabled);
+  const messages = state.messagesByServer[state.serverUrl]?.[state.currentChannel?.name];
+  if (messages) renderMessages(false);
 }
 
 function applyFontFamily(font) {
@@ -4745,28 +4593,48 @@ window.initChatSettings = initChatSettings;
 window.initAppearanceSettings = initAppearanceSettings;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Apply all persisted settings on load
-    const settingsToApply = [
-        [localStorage.getItem('originchats_font_size'), v => applyFontSize(v)],
-        [localStorage.getItem('originchats_theme'), v => applyTheme(v)],
-        [localStorage.getItem('originchats_message_grouping'), v => applyMessageGrouping(v === 'true')],
-        [localStorage.getItem('originchats_font_family'), v => applyFontFamily(v)],
-        [localStorage.getItem('originchats_enable_animations'), v => applyAnimations(v === 'true')],
-        [localStorage.getItem('originchats_reduce_motion'), v => v === 'true' && applyReduceMotion(true)],
-        [localStorage.getItem('originchats_show_scrollbars'), v => applyScrollbars(v === 'true')],
-        [localStorage.getItem('originchats_show_avatar_borders'), v => applyAvatarBorders(v === 'true')],
-        [localStorage.getItem('originchats_show_message_shadows'), v => applyMessageShadows(v === 'true')]
-    ];
-    settingsToApply.forEach(([val, fn]) => { if (val !== null) fn(val); });
+  // Apply all persisted settings on load
+  const settingsToApply = [
+    [localStorage.getItem('originchats_font_size'), v => applyFontSize(v)],
+    [localStorage.getItem('originchats_theme'), v => applyTheme(v)],
+    [localStorage.getItem('originchats_message_grouping'), v => applyMessageGrouping(v === 'true')],
+    [localStorage.getItem('originchats_font_family'), v => applyFontFamily(v)],
+    [localStorage.getItem('originchats_enable_animations'), v => applyAnimations(v === 'true')],
+    [localStorage.getItem('originchats_reduce_motion'), v => v === 'true' && applyReduceMotion(true)],
+    [localStorage.getItem('originchats_show_scrollbars'), v => applyScrollbars(v === 'true')],
+    [localStorage.getItem('originchats_show_avatar_borders'), v => applyAvatarBorders(v === 'true')],
+    [localStorage.getItem('originchats_show_message_shadows'), v => applyMessageShadows(v === 'true')]
+  ];
+  settingsToApply.forEach(([val, fn]) => { if (val !== null) fn(val); });
 
-    const savedWallpaper = localStorage.getItem('originchats_wallpaper');
-    const savedWallpaperOpacity = localStorage.getItem('originchats_wallpaper_opacity') || '100';
-    if (savedWallpaper) {
-        applyWallpaper(savedWallpaper, savedWallpaperOpacity);
-        applyWallpaperDimming(localStorage.getItem('originchats_wallpaper_dimmed') === 'true');
-    }
+  const savedWallpaper = localStorage.getItem('originchats_wallpaper');
+  const savedWallpaperOpacity = localStorage.getItem('originchats_wallpaper_opacity') || '100';
+  if (savedWallpaper) {
+    applyWallpaper(savedWallpaper, savedWallpaperOpacity);
+    applyWallpaperDimming(localStorage.getItem('originchats_wallpaper_dimmed') === 'true');
+  }
 
-    window.shouldShowEmbeds = localStorage.getItem('originchats_show_embeds') !== 'false';
-    window.showTimestamps = localStorage.getItem('originchats_show_timestamps') !== 'false';
-    window.gifAutoplayEnabled = localStorage.getItem('originchats_gif_autoplay') !== 'false';
+  window.shouldShowEmbeds = localStorage.getItem('originchats_show_embeds') !== 'false';
+  window.showTimestamps = localStorage.getItem('originchats_show_timestamps') !== 'false';
+  window.gifAutoplayEnabled = localStorage.getItem('originchats_gif_autoplay') !== 'false';
+
+  // Scroll to bottom button
+  const scrollBtn = document.getElementById('scroll-to-bottom');
+  const messagesEl = document.getElementById('messages');
+
+  if (scrollBtn && messagesEl) {
+    const updateScrollButton = () => {
+      const isNearBottom = (messagesEl.scrollHeight - (messagesEl.scrollTop + messagesEl.clientHeight)) < 80;
+      scrollBtn.style.display = isNearBottom ? 'none' : 'flex';
+    };
+
+    messagesEl.addEventListener('scroll', updateScrollButton);
+
+    scrollBtn.addEventListener('click', () => {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+
+    const observer = new MutationObserver(updateScrollButton);
+    observer.observe(messagesEl, { childList: true, subtree: true });
+  }
 });
