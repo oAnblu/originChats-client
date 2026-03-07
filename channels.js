@@ -54,8 +54,7 @@ function getChannelsToRender() {
     if (state.serverUrl === 'dms.mistium.com') {
         channels.push(
             { name: 'home', type: 'home' },
-            { name: 'relationships', type: 'relationships' },
-            { name: 'notes', type: 'text', display_name: 'Notes' },
+            { name: 'friends', type: 'relationships' },
             { name: 'new_message', type: 'new_message', display_name: 'New Message' }
         );
     }
@@ -130,7 +129,7 @@ function createRelationshipsChannelElement() {
     div.appendChild(icon);
 
     const name = document.createElement('span');
-    name.textContent = 'Relationships';
+    name.textContent = 'Friends';
     name.dataset.channelName = 'relationships';
     div.appendChild(name);
 
@@ -509,6 +508,9 @@ function updateChannelActiveState(element, channelName, index) {
 }
 
 function addChannelIndicators(element, channel) {
+    const isActive = state.currentChannel?.name === channel.name;
+    if (isActive) return;
+
     const channelKey = `${state.serverUrl}:${channel.name}`;
     const hasOldUnread = state.unreadByChannel[channelKey] > 0;
     const hasNewUnread = typeof isChannelUnread === 'function' && isChannelUnread(channel, state.serverUrl);
@@ -557,6 +559,8 @@ function addChannelIndicators(element, channel) {
 }
 
 function updateChannelIndicators(element, channel) {
+    const isActive = state.currentChannel?.name === channel.name;
+    
     const channelKey = `${state.serverUrl}:${channel.name}`;
     const hasOldUnread = state.unreadByChannel[channelKey] > 0;
     const hasNewUnread = typeof isChannelUnread === 'function' && isChannelUnread(channel, state.serverUrl);
@@ -567,31 +571,36 @@ function updateChannelIndicators(element, channel) {
     let unreadIndicator = element.querySelector('.unread-indicator');
     let typingIndicator = element.querySelector('.channel-typing-indicator');
 
-    if (hasPings) {
-        if (!badge) {
-            badge = document.createElement('span');
-            badge.className = 'ping-badge';
-            element.appendChild(badge);
-        }
-        badge.textContent = state.unreadPings[channel.name];
+    if (isActive) {
         if (unreadIndicator) unreadIndicator.remove();
-    } else if (badge) {
-        badge.remove();
-        if (hasUnread) {
-            if (!unreadIndicator) {
-                unreadIndicator = document.createElement('span');
-                unreadIndicator.className = 'unread-indicator';
-                element.appendChild(unreadIndicator);
+        if (badge) badge.remove();
+    } else {
+        if (hasPings) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'ping-badge';
+                element.appendChild(badge);
             }
-        } else if (unreadIndicator) {
+            badge.textContent = state.unreadPings[channel.name];
+            if (unreadIndicator) unreadIndicator.remove();
+        } else if (badge) {
+            badge.remove();
+            if (hasUnread) {
+                if (!unreadIndicator) {
+                    unreadIndicator = document.createElement('span');
+                    unreadIndicator.className = 'unread-indicator';
+                    element.appendChild(unreadIndicator);
+                }
+            } else if (unreadIndicator) {
+                unreadIndicator.remove();
+            }
+        } else if (hasUnread && !unreadIndicator) {
+            unreadIndicator = document.createElement('span');
+            unreadIndicator.className = 'unread-indicator';
+            element.appendChild(unreadIndicator);
+        } else if (!hasUnread && unreadIndicator) {
             unreadIndicator.remove();
         }
-    } else if (hasUnread && !unreadIndicator) {
-        unreadIndicator = document.createElement('span');
-        unreadIndicator.className = 'unread-indicator';
-        element.appendChild(unreadIndicator);
-    } else if (!hasUnread && unreadIndicator) {
-        unreadIndicator.remove();
     }
 
     const shouldShow = shouldShowTypingIndicator(channel.name);

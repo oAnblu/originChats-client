@@ -3892,7 +3892,7 @@ pre {
 .guild-divider {
     width: 32px;
     height: 2px;
-    background: var(--surface-light);
+    background: var(--primary);
     border-radius: 1px;
     margin: 8px auto;
 }

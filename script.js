@@ -1203,11 +1203,6 @@ function renderGuildSidebar() {
             item.addEventListener('contextmenu', (e) => { e.preventDefault(); showDMContextMenu(e, dmServer); });
             guildList.appendChild(item);
         });
-
-        const dmDivider = document.createElement('div');
-        dmDivider.className = 'guild-divider';
-        dmDivider.style.cssText = 'margin: 4px 0; height: 1px;';
-        guildList.appendChild(dmDivider);
     }
 
     addGuildSeparator();
@@ -2488,7 +2483,7 @@ function renderHomeContent() {
 
 function selectRelationshipsChannel() {
     updateCurrentChannelReadTime();
-    state.currentChannel = { name: 'relationships', display_name: 'Relationships' };
+    state.currentChannel = { name: 'relationships', display_name: 'Friends' };
 
     const channelNameEl = document.getElementById('channel-name');
     channelNameEl.innerHTML = '';
@@ -2497,7 +2492,7 @@ function selectRelationshipsChannel() {
     icon.setAttribute('data-lucide', 'users');
     icon.style.cssText = 'width: 16px; height: 16px; margin: 0 4px; color: var(--text-dim);';
     channelNameEl.appendChild(icon);
-    channelNameEl.appendChild(document.createTextNode('Relationships'));
+    channelNameEl.appendChild(document.createTextNode('Friends'));
     if (window.lucide) window.lucide.createIcons({ root: channelNameEl });
 
     const serverChannelHeader = document.getElementById('server-channel-header');
@@ -2534,8 +2529,7 @@ function renderDMRelationshipsContent() {
     const tabDefs = [
         { label: 'Friends', tab: 'friends' },
         { label: 'Requests', tab: 'requests' },
-        { label: 'Blocked', tab: 'blocked' },
-        { label: 'Notes', tab: 'notes' }
+        { label: 'Blocked', tab: 'blocked' }
     ];
 
     tabDefs.forEach(({ label, tab }) => {
