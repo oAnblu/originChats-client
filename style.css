@@ -1574,9 +1574,11 @@ a {
     display: flex;
     flex-direction: row;
     gap: 8px;
-    padding: 8px 0;
+    padding: 8px;
     overflow-x: auto;
     overflow-y: hidden;
+    background: var(--bg-secondary);
+    border-radius: 24px;
     max-height: 120px;
 }
 
@@ -1599,10 +1601,10 @@ a {
     flex-shrink: 0;
     width: 80px;
     height: 80px;
-    border-radius: var(--radius-md);
+    border-radius: 15px;
     overflow: hidden;
     background: var(--surface-light);
-    border: 1px solid var(--border);
+    border: 3px solid var(--border);
 }
 
 .pending-image-preview {
