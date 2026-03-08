@@ -154,11 +154,12 @@
     },
 
     // Render function for member list (existing functionality)
-    renderMembers: function (container, options) {
-      if (options && options.channel) {
-        window.originalRenderMembers?.(options.channel);
-      }
-    },
+renderMembers: function (container, options) {
+  const channel = options?.channel || window.state?.currentChannel;
+  if (window.renderMembers) {
+    window.renderMembers(channel);
+  }
+},
 
     renderSearch: function (container, options) {
       const self = this;
@@ -171,10 +172,6 @@
       const wrapper = document.createElement('div');
       wrapper.className = 'search-wrapper';
       wrapper.innerHTML = `
-      <div class="search-header">
-        <h3>Search Messages</h3>
-        <span class="close-search" onclick="window.MembersContent._closeSearch()"><i data-lucide="x"></i></span>
-      </div>
       <div class="search-input-wrapper">
         <input type="text" class="search-input" id="message-search-input" placeholder="Search in #${channel.name}..." autocomplete="off">
         <button class="search-submit-btn" id="search-submit-btn"><i data-lucide="search"></i></button>
@@ -207,69 +204,71 @@
       setTimeout(() => input.focus(), 100);
     },
 
-    _executeSearch: function (channelName, query, resultsContainer) {
-      const self = this;
-      resultsContainer.innerHTML = `<div class="account-loading"><div class="account-loading-spinner"></div><div class="account-loading-text">Searching...</div></div>`;
+	_executeSearch: function (channelName, query, resultsContainer) {
+		const self = this;
+		resultsContainer.innerHTML = `<div class="account-loading"><div class="account-loading-spinner"></div><div class="account-loading-text">Searching...</div></div>`;
 
-      const callbackId = 'search_' + Date.now();
-      self._searchPending = callbackId;
+		const callbackId = 'search_' + Date.now();
+		self._searchPending = callbackId;
+		self._searchContainer = resultsContainer;
+		self._searchChannel = channelName;
+		self._searchQuery = query;
 
-      const serverUrl = window.state?.serverUrl;
-      if (!serverUrl) {
-        resultsContainer.innerHTML = `<div class="account-error">Not connected to server</div>`;
-        return;
-      }
+		const serverUrl = window.state?.serverUrl;
+		if (!serverUrl || !window.wsSend) {
+			resultsContainer.innerHTML = `<div class="account-error">Not connected to server</div>`;
+			return;
+		}
 
-      window.wsSend({ cmd: 'messages_search', channel: channelName, query: query }, serverUrl);
+		window.wsSend({ cmd: 'messages_search', channel: channelName, query: query }, serverUrl);
 
-      const handler = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.cmd === 'messages_search' && data.channel === channelName && data.query === query) {
-            window.wsConnections[serverUrl]?.socket?.removeEventListener('message', handler);
-            if (self._searchPending === callbackId) {
-              self._renderSearchResults(data.results || [], resultsContainer);
-            }
-          }
-        } catch (e) { }
-      };
+		setTimeout(() => {
+			if (self._searchPending === callbackId) {
+				if (resultsContainer.querySelector('.account-loading')) {
+					resultsContainer.innerHTML = `<div class="account-error">Search timed out</div>`;
+				}
+				self._searchPending = null;
+			}
+		}, 10000);
+	},
 
-      const conn = window.wsConnections[serverUrl];
-      if (conn?.socket) {
-        conn.socket.addEventListener('message', handler);
-        setTimeout(() => {
-          if (self._searchPending === callbackId) {
-            conn.socket.removeEventListener('message', handler);
-            if (resultsContainer.querySelector('.account-loading')) {
-              resultsContainer.innerHTML = `<div class="account-error">Search timed out</div>`;
-            }
-          }
-        }, 10000);
-      }
-    },
+	_handleSearchResponse: function (msg) {
+		const self = this;
+		if (self._searchPending && self._searchChannel === msg.channel && self._searchQuery === msg.query) {
+			self._renderSearchResults(msg.results || [], self._searchContainer);
+			self._searchPending = null;
+		}
+	},
 
-    _renderSearchResults: function (messages, container) {
-      if (!messages || messages.length === 0) {
-        container.innerHTML = `<div class="account-empty">No messages found</div>`;
-        return;
-      }
+_renderSearchResults: function (messages, container) {
+  if (!messages || messages.length === 0) {
+    container.innerHTML = `<div class="account-empty">No messages found</div>`;
+    return;
+  }
 
-      container.innerHTML = '';
-      messages.forEach(msg => {
-        const item = document.createElement('div');
-        item.className = 'search-result-item';
-        item.innerHTML = `
-        <div class="search-result-header">
-          <img src="https://avatars.rotur.dev/${msg.user}" class="search-result-avatar" alt="${msg.user}">
-          <span class="search-result-username">${msg.user}</span>
-          <span class="search-result-time">${this._formatTime(msg.timestamp)}</span>
-        </div>
-        <div class="search-result-content">${this._escapeHtml(msg.content)}</div>
-      `;
-        item.addEventListener('click', () => this._scrollToMessage(msg.id));
-        container.appendChild(item);
-      });
-    },
+  container.innerHTML = '';
+  messages.forEach(msg => {
+    if (window.makeMessageElement) {
+      const item = window.makeMessageElement(msg, false, { context: 'search' });
+      item.addEventListener('click', () => this._scrollToMessage(msg.id));
+      container.appendChild(item);
+    } else {
+      const item = document.createElement('div');
+      item.className = 'search-result-item';
+      item.innerHTML = `
+<div class="search-result-header">
+<img src="https://avatars.rotur.dev/${msg.user}" class="search-result-avatar" alt="${msg.user}">
+<span class="search-result-username">${msg.user}</span>
+<span class="search-result-time">${this._formatTime(msg.timestamp)}</span>
+</div>
+<div class="search-result-content">${this._escapeHtml(msg.content)}</div>
+`;
+      item.addEventListener('click', () => this._scrollToMessage(msg.id));
+      container.appendChild(item);
+    }
+  });
+  if (window.lucide) window.lucide.createIcons({ root: container });
+},
 
     renderPinned: function (container, options) {
       const self = this;
@@ -282,10 +281,6 @@
       const wrapper = document.createElement('div');
       wrapper.className = 'pinned-wrapper';
       wrapper.innerHTML = `
-      <div class="search-header">
-        <h3>Pinned Messages</h3>
-        <span class="close-search" onclick="window.MembersContent._closePinned()"><i data-lucide="x"></i></span>
-      </div>
       <div class="pinned-results" id="pinned-results">
         <div class="account-loading"><div class="account-loading-spinner"></div><div class="account-loading-text">Loading...</div></div>
       </div>
@@ -296,69 +291,83 @@
       self._fetchPinnedMessages(channel.name, resultsContainer);
     },
 
-    _fetchPinnedMessages: function (channelName, resultsContainer) {
-      const self = this;
-      const serverUrl = window.state?.serverUrl;
-      if (!serverUrl) {
-        resultsContainer.innerHTML = `<div class="account-error">Not connected to server</div>`;
-        return;
-      }
+_fetchPinnedMessages: function (channelName, resultsContainer) {
+		const self = this;
+		const serverUrl = window.state?.serverUrl;
+		if (!serverUrl || !window.wsSend) {
+			resultsContainer.innerHTML = `<div class="account-error">Not connected to server</div>`;
+			return;
+		}
 
-      const callbackId = 'pinned_' + Date.now();
-      self._pinnedPending = callbackId;
+		const callbackId = 'pinned_' + Date.now();
+		self._pinnedPending = callbackId;
+		self._pinnedContainer = resultsContainer;
+		self._pinnedChannel = channelName;
 
-      window.wsSend({ cmd: 'messages_pinned', channel: channelName }, serverUrl);
+		window.wsSend({ cmd: 'messages_pinned', channel: channelName }, serverUrl);
 
-      const handler = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.cmd === 'messages_pinned' && data.channel === channelName) {
-            window.wsConnections[serverUrl]?.socket?.removeEventListener('message', handler);
-            if (self._pinnedPending === callbackId) {
-              self._renderPinnedMessages(data.messages || [], resultsContainer);
-            }
-          }
-        } catch (e) { }
-      };
+		setTimeout(() => {
+			if (self._pinnedPending === callbackId) {
+				if (resultsContainer.querySelector('.account-loading')) {
+					resultsContainer.innerHTML = `<div class="account-error">Failed to load pinned messages</div>`;
+				}
+				self._pinnedPending = null;
+			}
+		}, 10000);
+	},
 
-      const conn = window.wsConnections[serverUrl];
-      if (conn?.socket) {
-        conn.socket.addEventListener('message', handler);
-        setTimeout(() => {
-          if (self._pinnedPending === callbackId) {
-            conn.socket.removeEventListener('message', handler);
-            if (resultsContainer.querySelector('.account-loading')) {
-              resultsContainer.innerHTML = `<div class="account-error">Failed to load pinned messages</div>`;
-            }
-          }
-        }, 10000);
-      }
-    },
+	_handlePinnedResponse: function (msg) {
+		const self = this;
+		if (self._pinnedPending && self._pinnedChannel === msg.channel) {
+			self._renderPinnedMessages(msg.messages || [], self._pinnedContainer);
+			self._pinnedPending = null;
+		}
+	},
 
-    _renderPinnedMessages: function (messages, container) {
-      if (!messages || messages.length === 0) {
-        container.innerHTML = `<div class="account-empty">No pinned messages</div>`;
-        return;
-      }
+_renderPinnedMessages: function (messages, container) {
+		if (!messages || messages.length === 0) {
+			container.innerHTML = `<div class="account-empty">No pinned messages</div>`;
+			return;
+		}
 
-      container.innerHTML = '';
-      messages.forEach(msg => {
-        const item = document.createElement('div');
-        item.className = 'search-result-item pinned-item';
-        item.innerHTML = `
-        <div class="search-result-header">
-          <img src="https://avatars.rotur.dev/${msg.user}" class="search-result-avatar" alt="${msg.user}">
-          <span class="search-result-username">${msg.user}</span>
-          <span class="search-result-time">${this._formatTime(msg.timestamp)}</span>
-        </div>
-        <div class="search-result-content">${this._escapeHtml(msg.content)}</div>
-      `;
-        item.addEventListener('click', () => this._scrollToMessage(msg.id));
-        container.appendChild(item);
-      });
-    },
+		container.innerHTML = '';
+		const self = this;
+		messages.forEach(msg => {
+			const item = window.makeMessageElement(msg, false, {
+				context: 'pinned',
+				contextMenu: (e, msg) => self._openPinnedMessageContextMenu(e, msg),
+				onClick: (msg) => self._scrollToMessage(msg.id)
+			});
+			container.appendChild(item);
+		});
 
-    _scrollToMessage: function (messageId) {
+		if (window.lucide) window.lucide.createIcons({ root: container });
+	},
+
+	_openPinnedMessageContextMenu: function (event, msg) {
+		if (!window.contextMenu) return;
+		const m = window.contextMenu(event);
+		m.item('Jump to Message', () => this._scrollToMessage(msg.id), 'arrow-right')
+		.item('Copy text', () => { if (msg.content) navigator.clipboard.writeText(msg.content); }, 'copy')
+		.item('Copy ID', () => navigator.clipboard.writeText(msg.id), 'hash')
+		.sep()
+		.danger('Unpin Message', () => this._unpinMessage(msg), 'pin-off')
+		.show();
+	},
+
+	_unpinMessage: function (msg) {
+		const serverUrl = window.state?.serverUrl;
+		const channelName = window.state?.currentChannel?.name;
+		if (!serverUrl || !channelName || !window.wsSend) return;
+
+		window.wsSend({ cmd: 'message_unpin', id: msg.id, channel: channelName }, serverUrl);
+
+		if (window.MembersContent) {
+			window.MembersContent.render({ type: 'pinned', channel: window.state.currentChannel });
+		}
+	},
+
+	_scrollToMessage: function (messageId) {
       const msgEl = document.querySelector(`[data-msg-id="${messageId}"]`);
       if (msgEl) {
         msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -410,10 +419,13 @@ _closePinned: function () {
       return div.innerHTML;
     },
 
-    // Reset state - call this when switching to a completely different channel/view
-    reset: function () {
-      this.contentType = null;
-      this.currentUsername = null;
-    }
-  };
+// Reset state - call this when switching to a completely different channel/view
+	reset: function () {
+		if (this.contentType === 'pinned' || this.contentType === 'search') {
+			return;
+		}
+		this.contentType = null;
+		this.currentUsername = null;
+	}
+};
 })();

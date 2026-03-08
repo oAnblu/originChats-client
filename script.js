@@ -46,6 +46,7 @@ let state = {
     autoScrollEnabled: true,
     _pendingChannelSwitch: null
 };
+window.state = state;
 
 const pendingReplyTimeouts = {};
 let originFS = null;
@@ -638,21 +639,37 @@ function isMediumScreen() {
 window.isMediumScreen = isMediumScreen;
 
 function toggleMembersList() {
+  const membersList = document.getElementById('members-list');
+  const currentType = window.MembersContent?.contentType;
+
   if (isMediumScreen()) {
-    const membersList = document.getElementById('members-list');
-    if (membersList.classList.contains('open')) {
+    if (membersList.classList.contains('open') && currentType === 'members') {
       closeMembersOverlay();
+    } else if (currentType && currentType !== 'members') {
       window.MembersContent?.render({ type: 'members', channel: window.state?.currentChannel });
     } else {
       openMembersOverlay();
+      if (!currentType || currentType !== 'members') {
+        window.MembersContent?.render({ type: 'members', channel: window.state?.currentChannel });
+      }
     }
   } else {
-    const membersList = document.getElementById('members-list');
     const overlay = document.querySelector('.overlay');
     const chatScreen = document.getElementById('chat-screen');
-    membersList.classList.toggle('open');
-    overlay.classList.toggle('active');
-    chatScreen.classList.toggle('overlay-active');
+
+    if (currentType && currentType !== 'members') {
+      window.MembersContent?.render({ type: 'members', channel: window.state?.currentChannel });
+      membersList.classList.remove('open');
+      overlay.classList.remove('active');
+      chatScreen.classList.remove('overlay-active');
+    } else {
+      membersList.classList.toggle('open');
+      overlay.classList.toggle('active');
+      chatScreen.classList.toggle('overlay-active');
+      if (membersList.classList.contains('open') && (!currentType || currentType !== 'members')) {
+        window.MembersContent?.render({ type: 'members', channel: window.state?.currentChannel });
+      }
+    }
   }
 }
 
@@ -663,6 +680,7 @@ function openMembersOverlay() {
   membersList.classList.add('open');
   overlay.classList.add('active');
   chatScreen.classList.add('overlay-active');
+  renderMembers(state.currentChannel);
 }
 
 function closeMembersOverlay() {
@@ -1673,59 +1691,71 @@ async function handleMessage(msg, serverUrl) {
             renderMembers(state.currentChannel);
             break;
 
-        case 'users_online':
-            if (!state.usersByServer[serverUrl]) state.usersByServer[serverUrl] = {};
-            const onlineUsernames = new Set(msg.users.map(u => u.username.toLowerCase()));
-            for (const user of msg.users) {
-                const existing = getUserByUsernameCaseInsensitive(user.username, serverUrl);
-                if (existing) existing.status = 'online';
-            }
-            for (const username in state.usersByServer[serverUrl]) {
-                if (!onlineUsernames.has(username.toLowerCase())) state.usersByServer[serverUrl][username].status = 'offline';
-            }
-            renderMembers(state.currentChannel);
-            updateAccountProfileStatusIndicator();
-            break;
+case 'users_online':
+if (!state.usersByServer[serverUrl]) state.usersByServer[serverUrl] = {};
+const onlineUsernames = new Set(msg.users.map(u => u.username.toLowerCase()));
+for (const user of msg.users) {
+  const existing = getUserByUsernameCaseInsensitive(user.username, serverUrl);
+  if (existing) existing.status = 'online';
+}
+for (const username in state.usersByServer[serverUrl]) {
+  if (!onlineUsernames.has(username.toLowerCase())) state.usersByServer[serverUrl][username].status = 'offline';
+}
+if (!window.MembersContent || window.MembersContent.contentType === 'members' || !window.MembersContent.contentType) {
+  renderMembers(state.currentChannel);
+}
+updateAccountProfileStatusIndicator();
+break;
 
         case "user_connect":
         case "user_disconnect":
             wsSend({ cmd: 'users_online' }, serverUrl);
             break;
 
-        case 'messages_get': {
-            const ch = msg.channel;
-            const channelKey = `${serverUrl}:${ch}`;
-            if (!state.messagesByServer[serverUrl]) state.messagesByServer[serverUrl] = {};
-            const existing = state.messagesByServer[serverUrl][ch];
-            const req = state._loadingOlder?.[ch];
-            const isOlder = !!req && req.start > 0;
-            if (isOlder && existing) {
-                {
-                    const merged = [...msg.messages, ...existing];
-                    const seen = new Set();
-                    state.messagesByServer[serverUrl][ch] = merged
-                        .filter(m => {
-                            if (seen.has(m.id)) return false;
-                            seen.add(m.id);
-                            return true;
-                        });
-                }
-                state._olderStart[ch] = req.start;
-                state._loadingOlder[ch] = null;
-                state._olderLoading = false;
-            } else {
-                state.messagesByServer[serverUrl][ch] = msg.messages;
-                if (state.pendingMessageFetchesByChannel[channelKey]) delete state.pendingMessageFetchesByChannel[channelKey];
-                if (state.serverUrl === serverUrl && state.currentChannel && ch === state.currentChannel?.name) {
-                    const shouldForceScroll = state._pendingChannelSwitch === channelKey;
-                    renderMessages(shouldForceScroll);
-                    state._pendingChannelSwitch = null;
-                }
-            }
-            break;
-        }
+case 'messages_get': {
+	const ch = msg.channel;
+	const channelKey = `${serverUrl}:${ch}`;
+	if (!state.messagesByServer[serverUrl]) state.messagesByServer[serverUrl] = {};
+	const existing = state.messagesByServer[serverUrl][ch];
+	const req = state._loadingOlder?.[ch];
+	const isOlder = !!req && req.start > 0;
+	if (isOlder && existing) {
+		{
+			const merged = [...msg.messages, ...existing];
+			const seen = new Set();
+			state.messagesByServer[serverUrl][ch] = merged
+			.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+		}
+		state._olderStart[ch] = req.start;
+		state._loadingOlder[ch] = null;
+		state._olderLoading = false;
+	} else {
+		state.messagesByServer[serverUrl][ch] = msg.messages;
+		if (state.pendingMessageFetchesByChannel[channelKey]) delete state.pendingMessageFetchesByChannel[channelKey];
+		if (state.serverUrl === serverUrl && state.currentChannel && ch === state.currentChannel?.name) {
+			const shouldForceScroll = state._pendingChannelSwitch === channelKey;
+			renderMessages(shouldForceScroll);
+			state._pendingChannelSwitch = null;
+		}
+	}
+	break;
+}
 
-        case 'message_new':
+case 'messages_search': {
+	if (window.MembersContent?._handleSearchResponse) {
+		window.MembersContent._handleSearchResponse(msg);
+	}
+	break;
+}
+
+case 'messages_pinned': {
+	if (window.MembersContent?._handlePinnedResponse) {
+		window.MembersContent._handlePinnedResponse(msg);
+	}
+	break;
+}
+
+case 'message_new':
             if (!state.messagesByServer[serverUrl] || !state.messagesByServer[serverUrl][msg.channel]) return;
             state.messagesByServer[serverUrl][msg.channel].push(msg.message);
 
@@ -1856,14 +1886,25 @@ async function handleMessage(msg, serverUrl) {
             break;
         }
 
-        case 'message_delete': {
-            if (!state.messagesByServer[serverUrl]?.[msg.channel]) break;
-            state.messagesByServer[serverUrl][msg.channel] = state.messagesByServer[serverUrl][msg.channel].filter(m => m.id !== msg.id);
-            if (state.serverUrl === serverUrl && msg.channel === state.currentChannel?.name) renderMessages();
-            break;
-        }
+case 'message_delete': {
+	if (!state.messagesByServer[serverUrl]?.[msg.channel]) break;
+	state.messagesByServer[serverUrl][msg.channel] = state.messagesByServer[serverUrl][msg.channel].filter(m => m.id !== msg.id);
+	if (state.serverUrl === serverUrl && msg.channel === state.currentChannel?.name) renderMessages();
+	break;
+}
 
-        case 'typing': {
+case 'message_pin':
+case 'message_unpin': {
+	if (!state.messagesByServer[serverUrl]?.[msg.channel]) break;
+	const pinnedMsg = state.messagesByServer[serverUrl][msg.channel].find(m => m.id === msg.id);
+	if (pinnedMsg) {
+		pinnedMsg.pinned = msg.pinned;
+	}
+	if (state.serverUrl === serverUrl && msg.channel === state.currentChannel?.name) renderMessages();
+	break;
+}
+
+case 'typing': {
             const { channel, user } = msg;
             if (user === state.currentUser?.username) break;
             if (!state.typingUsersByServer[serverUrl]) state.typingUsersByServer[serverUrl] = {};
@@ -2207,19 +2248,20 @@ function selectHomeChannel() {
     const serverChannelHeader = document.getElementById('server-channel-header');
     if (serverChannelHeader) serverChannelHeader.style.display = 'none';
 
-    const messagesEl = document.getElementById('messages');
-    messagesEl.style.display = 'none';
-    const typingEl = document.getElementById('typing');
-    if (typingEl) typingEl.style.display = 'none';
-    const membersList = document.getElementById('members-list');
-    if (membersList) { membersList.innerHTML = ''; membersList.classList.remove('open'); membersList.style.display = 'none'; }
-    const inputArea = document.querySelector('.input-area');
-    if (inputArea) inputArea.style.display = 'none';
-    const dmFriendsContainer = document.getElementById('dm-friends-container');
-    if (dmFriendsContainer) dmFriendsContainer.style.display = 'none';
+const messagesEl = document.getElementById('messages');
+messagesEl.style.display = 'none';
+const typingEl = document.getElementById('typing');
+if (typingEl) typingEl.style.display = 'none';
+const membersList = document.getElementById('members-list');
+if (membersList) { membersList.innerHTML = ''; membersList.classList.remove('open'); membersList.style.display = 'none'; }
+closeMembersOverlay();
+const inputArea = document.querySelector('.input-area');
+if (inputArea) inputArea.style.display = 'none';
+const dmFriendsContainer = document.getElementById('dm-friends-container');
+if (dmFriendsContainer) dmFriendsContainer.style.display = 'none';
 
-    renderHomeContent();
-    renderChannels();
+renderHomeContent();
+renderChannels();
 
     document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
     const homeItem = Array.from(document.querySelectorAll('.channel-item')).find(el => el.querySelector('[data-channel-name]')?.dataset.channelName === 'home');
@@ -2313,17 +2355,18 @@ function selectRelationshipsChannel() {
     const serverChannelHeader = document.getElementById('server-channel-header');
     if (serverChannelHeader) serverChannelHeader.style.display = 'none';
 
-    const messagesEl = document.getElementById('messages');
-    messagesEl.style.display = 'none';
-    const typingEl = document.getElementById('typing');
-    if (typingEl) typingEl.style.display = 'none';
-    const membersList = document.getElementById('members-list');
-    if (membersList) { membersList.innerHTML = ''; membersList.classList.remove('open'); membersList.style.display = 'none'; }
-    const inputArea = document.querySelector('.input-area');
-    if (inputArea) inputArea.style.display = 'none';
+const messagesEl = document.getElementById('messages');
+messagesEl.style.display = 'none';
+const typingEl = document.getElementById('typing');
+if (typingEl) typingEl.style.display = 'none';
+const membersList = document.getElementById('members-list');
+if (membersList) { membersList.innerHTML = ''; membersList.classList.remove('open'); membersList.style.display = 'none'; }
+closeMembersOverlay();
+const inputArea = document.querySelector('.input-area');
+if (inputArea) inputArea.style.display = 'none';
 
-    renderDMRelationshipsContent();
-    renderChannels();
+renderDMRelationshipsContent();
+renderChannels();
 
     document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
     const relItem = Array.from(document.querySelectorAll('.channel-item')).find(el => el.querySelector('[data-channel-name]')?.dataset.channelName === 'relationships');
@@ -2528,265 +2571,290 @@ function getDaySeparator(timestamp) {
     return separator;
 }
 
-function makeMessageElement(msg, isSameUserRecent) {
-    const user = getUserByUsernameCaseInsensitive(msg.user) || { username: msg.user };
-    const timestamp = formatTimestamp(msg.timestamp);
-    const isReply = "reply_to" in msg;
-    const isNoGrouping = document.body.classList.contains('no-message-grouping');
-    const isHead = !isSameUserRecent || isReply || isNoGrouping;
-    const isBlocked = Array.isArray(state.currentUser?.sys?.blocked) && state.currentUser.sys.blocked.includes(msg.user);
+function makeMessageElement(msg, isSameUserRecent, options = {}) {
+	const context = options.context || 'chat';
+	const user = getUserByUsernameCaseInsensitive(msg.user) || { username: msg.user };
+	const timestamp = formatTimestamp(msg.timestamp);
+	const isReply = context === 'chat' && "reply_to" in msg;
+	const isNoGrouping = document.body.classList.contains('no-message-grouping');
+	const isHead = !isSameUserRecent || isReply || isNoGrouping;
+	const isBlocked = context === 'chat' && Array.isArray(state.currentUser?.sys?.blocked) && state.currentUser.sys.blocked.includes(msg.user);
 
-    const wrapper = document.createElement('div');
-    wrapper.className = isHead ? 'message-group' + (isReply ? ' has-reply' : '') : 'message-single';
-    wrapper.dataset.msgId = msg.id;
-    wrapper.classList.add('message-enter');
+	const wrapper = document.createElement('div');
+	wrapper.className = isHead ? 'message-group' + (isReply ? ' has-reply' : '') : 'message-single';
+	wrapper.dataset.msgId = msg.id;
+	wrapper.classList.add('message-enter');
 
-    if (isHead) {
-        if (isReply) {
-            const bodyContainer = document.createElement('div');
-            bodyContainer.className = 'message-group-body';
-            bodyContainer.appendChild(getAvatar(msg.user));
-            wrapper.appendChild(bodyContainer);
-        } else {
-            wrapper.appendChild(getAvatar(msg.user));
-        }
-    }
+	if (isHead) {
+		if (isReply) {
+			const bodyContainer = document.createElement('div');
+			bodyContainer.className = 'message-group-body';
+			bodyContainer.appendChild(getAvatar(msg.user));
+			wrapper.appendChild(bodyContainer);
+		} else {
+			wrapper.appendChild(getAvatar(msg.user));
+		}
+	}
 
-    const groupContent = document.createElement('div');
-    groupContent.className = 'message-group-content';
-    if (isHead && isReply) {
-        (wrapper.querySelector('.message-group-body') || wrapper).appendChild(groupContent);
-    } else {
-        wrapper.appendChild(groupContent);
-    }
+	const groupContent = document.createElement('div');
+	groupContent.className = 'message-group-content';
+	if (isHead && isReply) {
+		(wrapper.querySelector('.message-group-body') || wrapper).appendChild(groupContent);
+	} else {
+		wrapper.appendChild(groupContent);
+	}
 
-    // Actions bar
-    const actionsBar = document.createElement('div');
-    actionsBar.className = 'message-actions-bar';
-    wrapper.appendChild(actionsBar);
+	if (context === 'chat') {
+		const actionsBar = document.createElement('div');
+		actionsBar.className = 'message-actions-bar';
+		wrapper.appendChild(actionsBar);
 
-    const reactBtn = document.createElement('button');
-    reactBtn.className = 'action-btn';
-    reactBtn.setAttribute('data-emoji-anchor', 'true');
-    reactBtn.innerHTML = '<i data-lucide="smile"></i>';
-    reactBtn.addEventListener('click', (e) => { e.stopPropagation(); openReactionPicker(msg.id, reactBtn); });
+		const reactBtn = document.createElement('button');
+		reactBtn.className = 'action-btn';
+		reactBtn.setAttribute('data-emoji-anchor', 'true');
+		reactBtn.innerHTML = '<i data-lucide="smile"></i>';
+		reactBtn.addEventListener('click', (e) => { e.stopPropagation(); openReactionPicker(msg.id, reactBtn); });
 
-    const replyBtn = document.createElement('button');
-    replyBtn.className = 'action-btn';
-    replyBtn.innerHTML = '<i data-lucide="reply"></i>';
-    replyBtn.addEventListener('click', (e) => { e.stopPropagation(); replyToMessage(msg); });
+		const replyBtn = document.createElement('button');
+		replyBtn.className = 'action-btn';
+		replyBtn.innerHTML = '<i data-lucide="reply"></i>';
+		replyBtn.addEventListener('click', (e) => { e.stopPropagation(); replyToMessage(msg); });
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'action-btn';
-    deleteBtn.innerHTML = '<i data-lucide="trash"></i>';
-    deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteMessage(msg); });
+		const deleteBtn = document.createElement('button');
+		deleteBtn.className = 'action-btn';
+		deleteBtn.innerHTML = '<i data-lucide="trash"></i>';
+		deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteMessage(msg); });
 
-    actionsBar.appendChild(reactBtn);
-    actionsBar.appendChild(replyBtn);
-    actionsBar.appendChild(deleteBtn);
-    if (window.lucide) window.lucide.createIcons({ root: actionsBar });
+		const pinBtn = document.createElement('button');
+		pinBtn.className = 'action-btn';
+		pinBtn.innerHTML = msg.pinned ? '<i data-lucide="pin-off"></i>' : '<i data-lucide="pin"></i>';
+		pinBtn.addEventListener('click', (e) => { e.stopPropagation(); togglePinMessage(msg); });
 
-    if (isReply) {
-        const replyTo = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name]?.find(m => m.id === msg.reply_to.id);
-        const replyDiv = document.createElement('div');
-        replyDiv.className = 'message-reply';
+		actionsBar.appendChild(reactBtn);
+		actionsBar.appendChild(replyBtn);
+		actionsBar.appendChild(pinBtn);
+		actionsBar.appendChild(deleteBtn);
+		if (window.lucide) window.lucide.createIcons({ root: actionsBar });
+	}
 
-        if (replyTo) {
-            const replyUser = getUserByUsernameCaseInsensitive(replyTo.user) || { username: replyTo.user };
-            replyDiv.style.cursor = 'pointer';
-            replyDiv.dataset.msgId = msg.id;
-            replyDiv.dataset.replyToId = msg.reply_to.id;
-            replyDiv.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const originalMessageEl = document.querySelector(`[data-msg-id="${replyTo.id}"]`);
-                if (originalMessageEl) {
-                    originalMessageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    originalMessageEl.classList.add('highlight-message');
-                    setTimeout(() => originalMessageEl.classList.remove('highlight-message'), 2000);
-                }
-            });
+	if (isReply) {
+		const replyTo = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name]?.find(m => m.id === msg.reply_to.id);
+		const replyDiv = document.createElement('div');
+		replyDiv.className = 'message-reply';
 
-            const usernameSpan = document.createElement('span');
-            usernameSpan.className = 'reply-username';
-            usernameSpan.textContent = replyUser.username;
-            usernameSpan.style.cursor = 'pointer';
-            usernameSpan.addEventListener('click', (e) => { e.stopPropagation(); openAccountModal(replyUser.username); });
+		if (replyTo) {
+			const replyUser = getUserByUsernameCaseInsensitive(replyTo.user) || { username: replyTo.user };
+			replyDiv.style.cursor = 'pointer';
+			replyDiv.dataset.msgId = msg.id;
+			replyDiv.dataset.replyToId = msg.reply_to.id;
+			replyDiv.addEventListener('click', (e) => {
+				e.stopPropagation();
+				const originalMessageEl = document.querySelector(`[data-msg-id="${replyTo.id}"]`);
+				if (originalMessageEl) {
+					originalMessageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+					originalMessageEl.classList.add('highlight-message');
+					setTimeout(() => originalMessageEl.classList.remove('highlight-message'), 2000);
+				}
+			});
 
-            const contentSpan = document.createElement('span');
-            contentSpan.className = 'reply-content';
-            contentSpan.textContent = replyTo.content.length > 50 ? replyTo.content.substring(0, 50) + '...' : replyTo.content;
+			const usernameSpan = document.createElement('span');
+			usernameSpan.className = 'reply-username';
+			usernameSpan.textContent = replyUser.username;
+			usernameSpan.style.cursor = 'pointer';
+			usernameSpan.addEventListener('click', (e) => { e.stopPropagation(); openAccountModal(replyUser.username); });
 
-            replyDiv.appendChild(getAvatar(replyUser.username, 'small'));
-            const replyText = document.createElement('div');
-            replyText.appendChild(usernameSpan);
-            replyText.appendChild(contentSpan);
-            replyDiv.appendChild(replyText);
-            wrapper.insertBefore(replyDiv, wrapper.firstChild);
-        } else {
-            const replyKey = `${state.serverUrl}:${msg.reply_to.id}`;
-            if (!state.pendingReplyFetches[replyKey]) state.pendingReplyFetches[replyKey] = [];
+			const contentSpan = document.createElement('span');
+			contentSpan.className = 'reply-content';
+			contentSpan.textContent = replyTo.content.length > 50 ? replyTo.content.substring(0, 50) + '...' : replyTo.content;
 
-            const notFoundDiv = document.createElement('div');
-            notFoundDiv.className = 'message-reply reply-not-found';
-            const notFoundIcon = document.createElement('div');
-            notFoundIcon.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i>';
-            const notFoundText = document.createElement('div');
-            notFoundText.className = 'reply-username';
-            notFoundText.textContent = 'Loading...';
-            notFoundDiv.appendChild(notFoundIcon);
-            notFoundDiv.appendChild(notFoundText);
-            notFoundDiv.dataset.msgId = msg.id;
-            notFoundDiv.dataset.replyToId = msg.reply_to.id;
+			replyDiv.appendChild(getAvatar(replyUser.username, 'small'));
+			const replyText = document.createElement('div');
+			replyText.appendChild(usernameSpan);
+			replyText.appendChild(contentSpan);
+			replyDiv.appendChild(replyText);
+			wrapper.insertBefore(replyDiv, wrapper.firstChild);
+		} else {
+			const replyKey = `${state.serverUrl}:${msg.reply_to.id}`;
+			if (!state.pendingReplyFetches[replyKey]) state.pendingReplyFetches[replyKey] = [];
 
-            const timeoutKey = replyKey;
-            pendingReplyTimeouts[timeoutKey] = setTimeout(() => {
-                delete pendingReplyTimeouts[timeoutKey];
-                if (state.pendingReplyFetches[replyKey]) {
-                    state.pendingReplyFetches[replyKey].forEach((pending) => {
-                        const el = document.querySelector(`[data-reply-to-id="${msg.reply_to.id}"][data-msg-id="${pending.element.dataset.msgId}"]`);
-                        if (el) {
-                            el.className = 'message-reply reply-not-found';
-                            el.innerHTML = '';
-                            const xIcon = document.createElement('div');
-                            xIcon.innerHTML = '<i data-lucide="x-circle"></i>';
-                            const textDiv = document.createElement('div');
-                            textDiv.className = 'reply-username';
-                            textDiv.textContent = 'Message not found';
-                            el.appendChild(xIcon);
-                            el.appendChild(textDiv);
-                            if (window.lucide) window.lucide.createIcons({ root: xIcon });
-                        }
-                    });
-                    delete state.pendingReplyFetches[replyKey];
-                }
-            }, 5000);
+			const notFoundDiv = document.createElement('div');
+			notFoundDiv.className = 'message-reply reply-not-found';
+			const notFoundIcon = document.createElement('div');
+			notFoundIcon.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i>';
+			const notFoundText = document.createElement('div');
+			notFoundText.className = 'reply-username';
+			notFoundText.textContent = 'Loading...';
+			notFoundDiv.appendChild(notFoundIcon);
+			notFoundDiv.appendChild(notFoundText);
+			notFoundDiv.dataset.msgId = msg.id;
+			notFoundDiv.dataset.replyToId = msg.reply_to.id;
 
-            state.pendingReplyFetches[replyKey].push({ element: notFoundDiv, channel: state.currentChannel.name });
-            wsSend({ cmd: 'message_get', channel: state.currentChannel.name, id: msg.reply_to.id }, state.serverUrl);
-            wrapper.insertBefore(notFoundDiv, wrapper.firstChild);
-            if (window.lucide) window.lucide.createIcons({ root: notFoundIcon });
-        }
-    }
+			const timeoutKey = replyKey;
+			pendingReplyTimeouts[timeoutKey] = setTimeout(() => {
+				delete pendingReplyTimeouts[timeoutKey];
+				if (state.pendingReplyFetches[replyKey]) {
+					state.pendingReplyFetches[replyKey].forEach((pending) => {
+						const el = document.querySelector(`[data-reply-to-id="${msg.reply_to.id}"][data-msg-id="${pending.element.dataset.msgId}"]`);
+						if (el) {
+							el.className = 'message-reply reply-not-found';
+							el.innerHTML = '';
+							const xIcon = document.createElement('div');
+							xIcon.innerHTML = '<i data-lucide="x-circle"></i>';
+							const textDiv = document.createElement('div');
+							textDiv.className = 'reply-username';
+							textDiv.textContent = 'Message not found';
+							el.appendChild(xIcon);
+							el.appendChild(textDiv);
+							if (window.lucide) window.lucide.createIcons({ root: xIcon });
+						}
+					});
+					delete state.pendingReplyFetches[replyKey];
+				}
+			}, 5000);
 
-    if (isHead) {
-        const header = document.createElement('div');
-        header.className = 'message-header';
-        const usernameEl = document.createElement('span');
-        usernameEl.className = 'username';
-        usernameEl.textContent = msg.user;
-        usernameEl.style.color = user.color || '#fff';
-        usernameEl.style.cursor = 'pointer';
-        usernameEl.addEventListener('click', (e) => { e.stopPropagation(); openAccountModal(msg.user); });
-        const ts = document.createElement('span');
-        ts.className = 'timestamp';
-        ts.textContent = timestamp;
-        ts.dataset.timestamp = msg.timestamp;
-        ts.title = getFullTimestamp(msg.timestamp);
-        header.appendChild(usernameEl);
-        header.appendChild(ts);
-        if (msg.edited || msg.editedAt) {
-            const editedSpan = document.createElement('span');
-            editedSpan.className = 'edited-indicator';
-            editedSpan.textContent = '(edited)';
-            header.appendChild(editedSpan);
-        }
-        groupContent.appendChild(header);
-    }
+			state.pendingReplyFetches[replyKey].push({ element: notFoundDiv, channel: state.currentChannel.name });
+			wsSend({ cmd: 'message_get', channel: state.currentChannel.name, id: msg.reply_to.id }, state.serverUrl);
+			wrapper.insertBefore(notFoundDiv, wrapper.firstChild);
+			if (window.lucide) window.lucide.createIcons({ root: notFoundIcon });
+		}
+	}
 
-    if (isBlocked) {
-        const blockedMode = getBlockedMessagesMode();
-        const action = getBlockedMessageAction(blockedMode);
-        if (action === 'hide') { wrapper.style.display = 'none'; return wrapper; }
-        if (action === 'dim') { wrapper.classList.add('blocked-dimmed'); return wrapper; }
-        const notice = document.createElement('div');
-        notice.className = 'blocked-notice';
-        const btn = document.createElement('button');
-        btn.className = 'blocked-show-btn';
-        btn.textContent = 'Show';
-        notice.textContent = 'Message from blocked user – ';
-        notice.appendChild(btn);
-        btn.addEventListener('click', (e) => { e.stopPropagation(); revealBlockedMessage(wrapper, msg); });
-        groupContent.appendChild(notice);
-        setupMessageSwipe(wrapper, msg);
-        return wrapper;
-    }
+	if (isHead) {
+		const header = document.createElement('div');
+		header.className = 'message-header';
+		const usernameEl = document.createElement('span');
+		usernameEl.className = 'username';
+		usernameEl.textContent = msg.user;
+		usernameEl.style.color = user.color || '#fff';
+		usernameEl.style.cursor = 'pointer';
+		usernameEl.addEventListener('click', (e) => { e.stopPropagation(); openAccountModal(msg.user); });
+		const ts = document.createElement('span');
+		ts.className = 'timestamp';
+		ts.textContent = timestamp;
+		ts.dataset.timestamp = msg.timestamp;
+		ts.title = getFullTimestamp(msg.timestamp);
+		header.appendChild(usernameEl);
+		header.appendChild(ts);
+		if (msg.pinned) {
+			const pinnedIcon = document.createElement('span');
+			pinnedIcon.className = 'pinned-indicator';
+			pinnedIcon.innerHTML = '<i data-lucide="pin"></i>';
+			pinnedIcon.title = 'Pinned message';
+			header.appendChild(pinnedIcon);
+		}
+		if (msg.edited || msg.editedAt) {
+			const editedSpan = document.createElement('span');
+			editedSpan.className = 'edited-indicator';
+			editedSpan.textContent = '(edited)';
+			header.appendChild(editedSpan);
+		}
+		groupContent.appendChild(header);
+	}
 
-    const msgText = document.createElement('div');
-    msgText.className = 'message-text';
-    const embedLinks = [];
-    msgText.innerHTML = parseMsg(msg, embedLinks);
+	if (isBlocked) {
+		const blockedMode = getBlockedMessagesMode();
+		const action = getBlockedMessageAction(blockedMode);
+		if (action === 'hide') { wrapper.style.display = 'none'; return wrapper; }
+		if (action === 'dim') { wrapper.classList.add('blocked-dimmed'); return wrapper; }
+		const notice = document.createElement('div');
+		notice.className = 'blocked-notice';
+		const btn = document.createElement('button');
+		btn.className = 'blocked-show-btn';
+		btn.textContent = 'Show';
+		notice.textContent = 'Message from blocked user – ';
+		notice.appendChild(btn);
+		btn.addEventListener('click', (e) => { e.stopPropagation(); revealBlockedMessage(wrapper, msg); });
+		groupContent.appendChild(notice);
+		setupMessageSwipe(wrapper, msg);
+		return wrapper;
+	}
 
+	const msgText = document.createElement('div');
+	msgText.className = 'message-text';
+	const embedLinks = [];
+	msgText.innerHTML = parseMsg(msg, embedLinks);
 
-    if (embedLinks.length === 1 && isTenorOnlyMessage(embedLinks, msg.content)) {
-        msgText.style.display = 'none';
-    } else {
-        msgText.style.display = '';
-        msgText.classList.toggle('emoji-only', isEmojiOnly(msg.content));
-    }
+	if (embedLinks.length === 1 && isTenorOnlyMessage(embedLinks, msg.content)) {
+		msgText.style.display = 'none';
+	} else {
+		msgText.style.display = '';
+		msgText.classList.toggle('emoji-only', isEmojiOnly(msg.content));
+	}
 
-    if (window.twemoji) {
-        if (msgText) window.twemoji.parse(msgText);
-    }
+	if (window.twemoji) {
+		if (msgText) window.twemoji.parse(msgText);
+	}
 
-    msgText.querySelectorAll("pre code").forEach(block => {
-        try {
-            const code = block.textContent;
-            block.textContent = code;
-            hljs.highlightElement(block);
-        } catch (e) {
-            console.debug('Highlight error:', e);
-        }
-    });
-    msgText.querySelectorAll("a.potential-image").forEach(link => _processPotentialImageLink(link, groupContent));
+	msgText.querySelectorAll("pre code").forEach(block => {
+		try {
+			const code = block.textContent;
+			block.textContent = code;
+			hljs.highlightElement(block);
+		} catch (e) {
+			console.debug('Highlight error:', e);
+		}
+	});
+	msgText.querySelectorAll("a.potential-image").forEach(link => _processPotentialImageLink(link, groupContent));
 
-    msgText.classList.remove('mentioned');
-    if (state.currentUser) {
-        const matches = msg.content.match(pingRegex);
-        if (matches && matches.filter(m => m.trim().toLowerCase() === '@' + state.currentUser.username.toLowerCase()).length > 0) {
-            msgText.classList.add('mentioned');
-        }
-    }
+	msgText.classList.remove('mentioned');
+	if (state.currentUser) {
+		const matches = msg.content.match(pingRegex);
+		if (matches && matches.filter(m => m.trim().toLowerCase() === '@' + state.currentUser.username.toLowerCase()).length > 0) {
+			msgText.classList.add('mentioned');
+		}
+	}
 
-    const groupContent2 = wrapper.querySelector('.message-group-content');
-    if (groupContent2) _processEmbedLinks(embedLinks, groupContent2);
+	const groupContent2 = wrapper.querySelector('.message-group-content');
+	if (groupContent2) _processEmbedLinks(embedLinks, groupContent2);
 
-    if (!isHead) {
-        const hoverTs = document.createElement('div');
-        hoverTs.className = 'hover-timestamp';
-        hoverTs.dataset.timestamp = msg.timestamp;
-        hoverTs.textContent = formatTimestamp(msg.timestamp);
-        if (msg.edited || msg.editedAt) {
-            const editedSpan = document.createElement('span');
-            editedSpan.className = 'edited-indicator';
-            editedSpan.textContent = '(edited)';
-            hoverTs.appendChild(editedSpan);
-        }
-        groupContent.appendChild(hoverTs);
-    }
+	if (!isHead) {
+		const hoverTs = document.createElement('div');
+		hoverTs.className = 'hover-timestamp';
+		hoverTs.dataset.timestamp = msg.timestamp;
+		hoverTs.textContent = formatTimestamp(msg.timestamp);
+		if (msg.edited || msg.editedAt) {
+			const editedSpan = document.createElement('span');
+			editedSpan.className = 'edited-indicator';
+			editedSpan.textContent = '(edited)';
+			hoverTs.appendChild(editedSpan);
+		}
+		groupContent.appendChild(hoverTs);
+	}
 
-    groupContent.appendChild(msgText);
+	groupContent.appendChild(msgText);
 
-    msgText.querySelectorAll('.message-image').forEach(img => attachImageErrorFallback(img, img.src || img.dataset.imageUrl));
+	msgText.querySelectorAll('.message-image').forEach(img => attachImageErrorFallback(img, img.src || img.dataset.imageUrl));
 
-    window.renderReactions(msg, groupContent);
+	if (context === 'chat') {
+		window.renderReactions(msg, groupContent);
+		setupMessageSwipe(wrapper, msg);
+	}
 
-    setupMessageSwipe(wrapper, msg);
+	wrapper.addEventListener('contextmenu', (e) => {
+		e.preventDefault();
+		const imgEl = e.target.closest('.message-image');
+		const link = e.target.closest('a[href]');
+		if (imgEl && imgEl.dataset.imageUrl) {
+			openImageContextMenu(e, msg, imgEl.dataset.imageUrl);
+		} else if (link && link.href && !link.href.startsWith('javascript:')) {
+			openLinkContextMenu(e, link.href);
+		} else {
+			const contextMenuFn = options.contextMenu || openMessageContextMenu;
+			contextMenuFn(e, msg);
+		}
+	});
 
-    wrapper.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        const imgEl = e.target.closest('.message-image');
-        const link = e.target.closest('a[href]');
-        if (imgEl && imgEl.dataset.imageUrl) {
-            openImageContextMenu(e, msg, imgEl.dataset.imageUrl);
-        } else if (link && link.href && !link.href.startsWith('javascript:')) {
-            openLinkContextMenu(e, link.href);
-        } else {
-            openMessageContextMenu(e, msg);
-        }
-    });
+	if (options.onClick) {
+		wrapper.addEventListener('click', (e) => {
+			if (!e.target.closest('a') && !e.target.closest('button')) {
+				options.onClick(msg);
+			}
+		});
+	}
 
-    return wrapper;
+	return wrapper;
 }
+window.makeMessageElement = makeMessageElement;
 
 async function renderMessages(shouldScrollToBottom = true) {
     if (state.renderInProgress) return;
@@ -3048,17 +3116,24 @@ function revealBlockedMessage(wrapper, msg) {
 }
 
 async function deleteMessage(msg) {
-    if (state.currentChannel?.name === 'notes' && window.notesChannel) {
-        await window.notesChannel.deleteMessage(msg.id);
-        if (state.messagesByServer[state.serverUrl]?.['notes']) {
-            state.messagesByServer[state.serverUrl]['notes'] = state.messagesByServer[state.serverUrl]['notes'].filter(m => m.id !== msg.id);
-        }
-        renderMessages();
-        return;
-    }
-    wsSend({ cmd: 'message_delete', id: msg.id, channel: state.currentChannel.name }, state.serverUrl);
+	if (state.currentChannel?.name === 'notes' && window.notesChannel) {
+		await window.notesChannel.deleteMessage(msg.id);
+		if (state.messagesByServer[state.serverUrl]?.['notes']) {
+			state.messagesByServer[state.serverUrl]['notes'] = state.messagesByServer[state.serverUrl]['notes'].filter(m => m.id !== msg.id);
+		}
+		renderMessages();
+		return;
+	}
+	wsSend({ cmd: 'message_delete', id: msg.id, channel: state.currentChannel.name }, state.serverUrl);
 }
 window.deleteMessage = deleteMessage;
+
+function togglePinMessage(msg) {
+	if (!state.currentChannel?.name) return;
+	const cmd = msg.pinned ? 'message_unpin' : 'message_pin';
+	wsSend({ cmd, id: msg.id, channel: state.currentChannel.name }, state.serverUrl);
+}
+window.togglePinMessage = togglePinMessage;
 
 function getMessageContextMenuHelpers(event, msg) {
     return {
@@ -3083,17 +3158,18 @@ function getMessageContextMenuHelpers(event, msg) {
 }
 
 function openMessageContextMenu(event, msg) {
-    const h = getMessageContextMenuHelpers(event, msg);
-    const m = contextMenu(event);
-    if (msg.user === state.currentUser?.username) m.item('Edit', () => startEditMessage(msg), 'edit-3');
-    m.item('Reply', () => replyToMessage(msg), 'message-circle')
-        .item('Copy text', h.copyText, 'copy')
-        .item('Copy ID', h.copyId, 'hash')
-        .item('Quote', h.quote, 'corner-up-right')
-        .item('React', h.react, 'smile')
-        .sep()
-        .danger('Delete', () => deleteMessage(msg))
-        .show();
+	const h = getMessageContextMenuHelpers(event, msg);
+	const m = contextMenu(event);
+	if (msg.user === state.currentUser?.username) m.item('Edit', () => startEditMessage(msg), 'edit-3');
+	m.item('Reply', () => replyToMessage(msg), 'message-circle')
+	.item('Copy text', h.copyText, 'copy')
+	.item('Copy ID', h.copyId, 'hash')
+	.item('Quote', h.quote, 'corner-up-right')
+	.item('React', h.react, 'smile')
+	.item(msg.pinned ? 'Unpin' : 'Pin', () => togglePinMessage(msg), msg.pinned ? 'pin-off' : 'pin')
+	.sep()
+	.danger('Delete', () => deleteMessage(msg))
+	.show();
 }
 
 function openLinkContextMenu(event, url) {
@@ -3158,14 +3234,6 @@ function renderMembers(channel) {
         }
     }
 
-    let headerSec = container.querySelector('.members-header');
-    if (!headerSec) {
-        headerSec = document.createElement('div');
-        headerSec.className = 'members-header';
-        headerSec.innerHTML = `<h3>Members</h3><span class="close-members" onclick="toggleMembersList()"><i data-lucide="x"></i></span>`;
-        container.insertBefore(headerSec, container.firstChild);
-    }
-
     let ownerSec = container.querySelector('.section-owner');
     let onlineSec = container.querySelector('.section-online');
     let offlineSec = container.querySelector('.section-offline');
@@ -3206,7 +3274,6 @@ function renderMembers(channel) {
     updateSection(onlineSec, online);
     updateSection(offlineSec, offline);
 
-    if (headerSec) container.appendChild(headerSec);
     if (!isDM && ownerSec) container.appendChild(ownerSec);
     container.appendChild(onlineSec);
     container.appendChild(offlineSec);
@@ -3232,11 +3299,12 @@ function renderMembers(channel) {
             name.textContent = u.username;
             name.style.color = u.color || '#fff';
             el.classList.toggle('offline', u.status !== 'online');
-            membersMap.delete(u.username);
-        }
-        membersMap.forEach(el => el.remove());
-    }
+membersMap.delete(u.username);
 }
+membersMap.forEach(el => el.remove());
+}
+}
+window.renderMembers = renderMembers;
 
 function replaceShortcodesWithEmojis(text) {
     if (!window.shortcodeMap) return text;
@@ -3244,47 +3312,65 @@ function replaceShortcodesWithEmojis(text) {
 }
 
 async function sendMessage() {
-    closeMentionPopup();
-    const input = document.getElementById('message-input');
-    let content = replaceShortcodesWithEmojis(input.value.trim());
-    if (!content || !state.currentChannel) return;
+	closeMentionPopup();
+	const input = document.getElementById('message-input');
+	let content = replaceShortcodesWithEmojis(input.value.trim());
 
-    if (window.editingMessage) {
-        const msgId = window.editingMessage.id;
-        wsSend({ cmd: 'message_edit', id: msgId, channel: state.currentChannel.name, content }, state.serverUrl);
-        const msg = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name]?.find(m => m.id === msgId);
-        if (msg) {
-            msg.edited = true; msg.editedAt = Date.now(); msg.content = content;
-            const wrapper = document.querySelector(`[data-msg-id="${msgId}"]`);
-            if (wrapper) {
-                const header = wrapper.querySelector('.message-header');
-                if (header && !header.querySelector('.edited-indicator')) {
-                    const editedIndicator = document.createElement('span');
-                    editedIndicator.className = 'edited-indicator';
-                    editedIndicator.textContent = '(edited)';
-                    header.appendChild(editedIndicator);
-                }
-            }
-        }
-        window.editingMessage = null;
-        originalInputValue = '';
-        document.getElementById('reply-bar').classList.remove('active', 'editing-mode');
-        input.value = '';
-        input.style.height = 'auto';
-        return;
-    }
+	const pendingImages = window.pendingImageUploads || [];
+	const hasImages = pendingImages.length > 0;
+	const hasText = content.length > 0;
 
-    const msg = { cmd: 'message_new', channel: state.currentChannel.name, content };
-    if (state.replyTo) { msg.reply_to = state.replyTo.id; cancelReply(); }
+	if (!hasText && !hasImages) return;
+	if (!state.currentChannel) return;
 
-    if (state.serverUrl === 'dms.mistium.com' && state.currentChannel?.name === 'notes' && window.notesChannel) {
-        const savedMsg = await window.notesChannel.saveMessage(content, state.currentUser?.username ?? "originChats");
-        if (savedMsg) { state.messagesByServer[state.serverUrl][state.currentChannel.name].push(savedMsg); appendMessage(savedMsg); }
-    } else {
-        wsSend(msg, state.serverUrl);
-    }
-    input.value = '';
-    input.style.height = 'auto';
+	if (window.editingMessage) {
+		const msgId = window.editingMessage.id;
+		wsSend({ cmd: 'message_edit', id: msgId, channel: state.currentChannel.name, content }, state.serverUrl);
+		const msg = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name]?.find(m => m.id === msgId);
+		if (msg) {
+			msg.edited = true; msg.editedAt = Date.now(); msg.content = content;
+			const wrapper = document.querySelector(`[data-msg-id="${msgId}"]`);
+			if (wrapper) {
+				const header = wrapper.querySelector('.message-header');
+				if (header && !header.querySelector('.edited-indicator')) {
+					const editedIndicator = document.createElement('span');
+					editedIndicator.className = 'edited-indicator';
+					editedIndicator.textContent = '(edited)';
+					header.appendChild(editedIndicator);
+				}
+			}
+		}
+		window.editingMessage = null;
+		originalInputValue = '';
+		document.getElementById('reply-bar').classList.remove('active', 'editing-mode');
+		input.value = '';
+		input.style.height = 'auto';
+		return;
+	}
+
+	let finalContent = content;
+	if (hasImages) {
+		const imageUrls = pendingImages.map(img => img.url);
+		if (hasText) {
+			finalContent = content + '\n' + imageUrls.join('\n');
+		} else {
+			finalContent = imageUrls.join('\n');
+		}
+	}
+
+	const msg = { cmd: 'message_new', channel: state.currentChannel.name, content: finalContent };
+	if (state.replyTo) { msg.reply_to = state.replyTo.id; cancelReply(); }
+
+	if (state.serverUrl === 'dms.mistium.com' && state.currentChannel?.name === 'notes' && window.notesChannel) {
+		const savedMsg = await window.notesChannel.saveMessage(finalContent, state.currentUser?.username ?? "originChats");
+		if (savedMsg) { state.messagesByServer[state.serverUrl][state.currentChannel.name].push(savedMsg); appendMessage(savedMsg); }
+	} else {
+		wsSend(msg, state.serverUrl);
+	}
+
+	input.value = '';
+	input.style.height = 'auto';
+	clearPendingImages();
 }
 
 let typing = false;
@@ -4076,43 +4162,94 @@ function handleDrop(e) {
 }
 
 async function handleFileUpload(files) {
-    const server = window.getEnabledMediaServer();
-    if (!server) { showError('No media server configured. Please add a media server in settings.'); openSettings(); return; }
-    const input = document.getElementById('message-input');
-    for (const file of files) {
-        try {
-            showUploadProgress(file.name);
-            const imageUrl = await window.uploadImage(file, server);
-            hideUploadProgress();
-            if (input) {
-                const cursorPosition = input.selectionStart || input.value.length;
-                const beforeCursor = input.value.substring(0, cursorPosition);
-                const afterCursor = input.value.substring(cursorPosition);
-                const spaceBefore = beforeCursor.length > 0 && !beforeCursor.endsWith(' ') ? ' ' : '';
-                const spaceAfter = afterCursor.length > 0 && !afterCursor.startsWith(' ') ? ' ' : '';
-                input.value = beforeCursor + spaceBefore + imageUrl + spaceAfter + afterCursor;
-                const newPos = cursorPosition + spaceBefore.length + imageUrl.length + spaceAfter.length;
-                input.setSelectionRange(newPos, newPos);
-                input.focus();
-            }
-        } catch (error) {
-            hideUploadProgress();
-            showError(`Failed to upload ${file.name}: ${error.message}`);
-        }
-    }
+	const server = window.getEnabledMediaServer();
+	if (!server) { showError('No media server configured. Please add a media server in settings.'); openSettings(); return; }
+
+	for (const file of files) {
+		try {
+			showUploadProgress(file.name);
+			const imageUrl = await window.uploadImage(file, server);
+			hideUploadProgress();
+			addPendingImage(imageUrl, file.name);
+		} catch (error) {
+			hideUploadProgress();
+			showError(`Failed to upload ${file.name}: ${error.message}`);
+		}
+	}
+}
+
+window.pendingImageUploads = [];
+
+function addPendingImage(url, fileName) {
+	window.pendingImageUploads.push({ url, fileName, id: Date.now() + Math.random() });
+	renderPendingImages();
+}
+
+function removePendingImage(id) {
+	window.pendingImageUploads = window.pendingImageUploads.filter(img => img.id !== id);
+	renderPendingImages();
+}
+
+function clearPendingImages() {
+	window.pendingImageUploads = [];
+	renderPendingImages();
+}
+
+function renderPendingImages() {
+	const container = document.getElementById('pending-images');
+	if (!container) return;
+
+	container.innerHTML = '';
+	const images = window.pendingImageUploads;
+
+	if (images.length === 0) {
+		container.style.display = 'none';
+		return;
+	}
+
+	container.style.display = 'flex';
+	images.forEach(img => {
+		const wrapper = document.createElement('div');
+		wrapper.className = 'pending-image-wrapper';
+
+		const preview = document.createElement('img');
+		preview.src = img.url;
+		preview.className = 'pending-image-preview';
+		preview.alt = img.fileName;
+		preview.onclick = () => {
+			if (window.openImageModal) window.openImageModal(img.url);
+		};
+
+		const removeBtn = document.createElement('button');
+		removeBtn.className = 'pending-image-remove';
+		removeBtn.innerHTML = '<i data-lucide="x"></i>';
+		removeBtn.onclick = (e) => {
+			e.stopPropagation();
+			removePendingImage(img.id);
+		};
+
+		wrapper.appendChild(preview);
+		wrapper.appendChild(removeBtn);
+		container.appendChild(wrapper);
+	});
+
+	if (window.lucide) window.lucide.createIcons({ root: container });
 }
 
 function showUploadProgress(fileName) {
-    const input = document.getElementById('message-input');
-    input.value = `[Uploading ${fileName}...]`;
-    input.disabled = true;
+	const input = document.getElementById('message-input');
+	const placeholder = input.getAttribute('placeholder') || 'Type a message...';
+	input.setAttribute('data-placeholder', placeholder);
+	input.setAttribute('placeholder', `Uploading ${fileName}...`);
+	input.disabled = true;
 }
 
 function hideUploadProgress() {
-    const input = document.getElementById('message-input');
-    input.value = '';
-    input.disabled = false;
-    input.focus();
+	const input = document.getElementById('message-input');
+	const placeholder = input.getAttribute('data-placeholder') || 'Type a message...';
+	input.setAttribute('placeholder', placeholder);
+	input.disabled = false;
+	input.focus();
 }
 
 const input = document.getElementById('message-input');
@@ -4572,25 +4709,31 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.openMessageSearch = function () {
-  if (!window.MembersContent) return;
-  if (window.state?.serverUrl === 'dms.mistium.com' && (!window.state?.currentChannel || ['home', 'relationships', 'notes', 'new_message'].includes(window.state.currentChannel.name))) {
-    return;
-  }
-  if (!window.state?.currentChannel) return;
-  if (isMediumScreen()) {
-    openMembersOverlay();
-  }
-  window.MembersContent.render({ type: 'search', channel: window.state.currentChannel });
+    console.log('openMessageSearch called');
+    console.log('MembersContent:', window.MembersContent);
+    console.log('currentChannel:', window.state?.currentChannel);
+    if (!window.MembersContent) return;
+    if (window.state?.serverUrl === 'dms.mistium.com' && (!window.state?.currentChannel || ['home', 'relationships', 'notes', 'new_message'].includes(window.state.currentChannel.name))) {
+        return;
+    }
+    if (!window.state?.currentChannel) return;
+    if (isMediumScreen()) {
+        openMembersOverlay();
+    }
+    window.MembersContent.render({ type: 'search', channel: window.state.currentChannel });
 };
 
 window.openPinnedMessages = function () {
-  if (!window.MembersContent) return;
-  if (window.state?.serverUrl === 'dms.mistium.com' && (!window.state?.currentChannel || ['home', 'relationships', 'notes', 'new_message'].includes(window.state.currentChannel.name))) {
-    return;
-  }
-  if (!window.state?.currentChannel) return;
-  if (isMediumScreen()) {
-    openMembersOverlay();
-  }
-  window.MembersContent.render({ type: 'pinned', channel: window.state.currentChannel });
+    console.log('openPinnedMessages called');
+    console.log('MembersContent:', window.MembersContent);
+    console.log('currentChannel:', window.state?.currentChannel);
+    if (!window.MembersContent) return;
+    if (window.state?.serverUrl === 'dms.mistium.com' && (!window.state?.currentChannel || ['home', 'relationships', 'notes', 'new_message'].includes(window.state.currentChannel.name))) {
+        return;
+    }
+    if (!window.state?.currentChannel) return;
+    if (isMediumScreen()) {
+        openMembersOverlay();
+    }
+    window.MembersContent.render({ type: 'pinned', channel: window.state.currentChannel });
 };
