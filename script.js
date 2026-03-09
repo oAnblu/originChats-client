@@ -126,6 +126,22 @@ function attachImageErrorFallback(img, url) {
             img.parentNode.replaceChild(link, img);
         }
     };
+
+    img.style.cursor = 'zoom-in';
+
+    const handleImageClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const imageUrl = img.dataset.imageUrl || url;
+        if (window.openImageModal) window.openImageModal(imageUrl);
+    };
+
+    img.addEventListener('click', handleImageClick);
+
+    const parentLink = img.closest('a[href]');
+    if (parentLink) {
+        parentLink.addEventListener('click', handleImageClick);
+    }
 }
 
 /**
@@ -2013,19 +2029,26 @@ function updateTypingIndicator() {
     const typingEl = document.getElementById("typing");
     if (!typingEl) return;
     const channel = state.currentChannel?.name;
-    if (!channel) return;
+    if (!channel) {
+        typingEl.textContent = "";
+        return;
+    }
     const typingMap = state.typingUsersByServer[state.serverUrl]?.[channel];
-    if (!typingMap) return;
+    if (!typingMap) {
+        typingEl.textContent = "";
+        return;
+    }
 
     const now = Date.now();
     for (const [user, expiry] of typingMap) { if (expiry < now) typingMap.delete(user); }
     const users = [...typingMap.keys()];
 
-    if (users.length === 0) { typingEl.textContent = ""; typingEl.style.visibility = 'hidden'; return; }
+    if (users.length === 0) {
+        typingEl.textContent = "";
+        return;
+    }
     let text = users.length === 1 ? `${users[0]} is typing...` : users.length === 2 ? `${users[0]} and ${users[1]} are typing...` : `${users.length} people are typing...`;
     typingEl.textContent = text;
-    typingEl.style.display = '';
-    typingEl.style.visibility = 'visible';
 }
 
 function wsSend(data, serverUrl) {
@@ -2054,7 +2077,7 @@ function updateChannelListTyping(channelName) {
                 item.appendChild(indicator);
             }
         } else if (indicator) {
-            indicator.remove();
+            indicator.textContent = '';
         }
         break;
     }
@@ -2089,7 +2112,7 @@ async function selectChannel(channel) {
         if (dmFriendsContainer) dmFriendsContainer.style.display = 'none';
         if (inputArea) inputArea.style.display = 'flex';
         if (membersList) membersList.style.display = 'none';
-        if (typingEl) typingEl.style.display = 'none';
+        if (typingEl) typingEl.textContent = '';
         if (serverChannelHeader) serverChannelHeader.style.display = 'none';
 
         const channelNameEl = document.getElementById('channel-name');
@@ -2214,7 +2237,7 @@ async function selectChannel(channel) {
     state.autoScrollEnabled = true;
     if (!state.messagesByServer[state.serverUrl]?.[channel.name]) {
         state.pendingMessageFetchesByChannel[channelKey] = true;
-        wsSend({ cmd: 'messages_get', channel: channel.name }, state.serverUrl);
+        wsSend({ cmd: 'messages_get', channel: channel.name, limit: 30 }, state.serverUrl);
     } else {
         renderMessages();
         state._pendingChannelSwitch = null;
@@ -2257,7 +2280,7 @@ function selectHomeChannel() {
     const messagesEl = document.getElementById('messages');
     messagesEl.style.display = 'none';
     const typingEl = document.getElementById('typing');
-    if (typingEl) typingEl.style.display = 'none';
+    if (typingEl) typingEl.style.display = '';
     const membersList = document.getElementById('members-list');
     if (membersList) { membersList.innerHTML = ''; membersList.classList.remove('open'); membersList.style.display = 'none'; }
     closeMembersOverlay();
@@ -2364,7 +2387,7 @@ function selectRelationshipsChannel() {
     const messagesEl = document.getElementById('messages');
     messagesEl.style.display = 'none';
     const typingEl = document.getElementById('typing');
-    if (typingEl) typingEl.style.display = 'none';
+    if (typingEl) typingEl.style.display = '';
     const membersList = document.getElementById('members-list');
     if (membersList) { membersList.innerHTML = ''; membersList.classList.remove('open'); membersList.style.display = 'none'; }
     closeMembersOverlay();
@@ -3447,22 +3470,10 @@ function replyToMessage(msg) {
     const icon = document.getElementById('reply-bar-icon');
     const label = document.getElementById('reply-bar-label');
     const text = document.getElementById('reply-text');
-    const preview = document.getElementById('reply-preview');
 
     icon.setAttribute('data-lucide', 'corner-up-left');
     label.textContent = 'Replying to';
     text.innerHTML = `<span class="username">${escapeHtml(msg.user)}</span>`;
-
-    if (msg.content && msg.content.trim()) {
-        const cleanContent = msg.content.replace(/```[\s\S]*?```/g, '[code]').replace(/`[^`]*`/g, '[code]');
-        preview.textContent = cleanContent.length > 100 ? cleanContent.substring(0, 100) + '...' : cleanContent;
-        preview.style.display = 'block';
-    } else if (msg.attachments && msg.attachments.length > 0) {
-        preview.textContent = msg.attachments.length === 1 ? '[Attachment]' : `[${msg.attachments.length} Attachments]`;
-        preview.style.display = 'block';
-    } else {
-        preview.style.display = 'none';
-    }
 
     replyBar.classList.add('active');
     replyBar.classList.remove('editing-mode');
@@ -3472,7 +3483,6 @@ function replyToMessage(msg) {
 
 function cancelReply() {
     state.replyTo = null;
-    document.getElementById('reply-preview').style.display = 'none';
     document.getElementById('reply-bar').classList.remove('active', 'editing-mode');
 }
 

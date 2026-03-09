@@ -680,15 +680,10 @@ function _setReplyBarMode({ icon, label, text, previewText, active, editingMode 
     const iconEl = document.getElementById('reply-bar-icon');
     const labelEl = document.getElementById('reply-bar-label');
     const textEl = document.getElementById('reply-text');
-    const previewEl = document.getElementById('reply-preview');
 
     if (iconEl) iconEl.setAttribute('data-lucide', icon);
     if (labelEl) labelEl.textContent = label;
     if (textEl) textEl.innerHTML = text;
-    if (previewEl) {
-        if (previewText !== null) { previewEl.textContent = previewText; previewEl.style.display = 'block'; }
-        else { previewEl.style.display = 'none'; }
-    }
 
     if (replyBar) {
         replyBar.classList.toggle('active', active);

@@ -527,9 +527,9 @@ function addChannelIndicators(element, channel) {
     if (unreadIndicator && (!hasUnread || hasPings)) {
         unreadIndicator.remove();
     }
-    if (typingIndicator && shouldRemoveTypingIndicator(channel.name)) {
-        typingIndicator.remove();
-    }
+if (typingIndicator && shouldRemoveTypingIndicator(channel.name)) {
+    typingIndicator.textContent = '';
+  }
 
     if (hasPings && !badge) {
         badge = document.createElement('span');
@@ -546,16 +546,18 @@ function addChannelIndicators(element, channel) {
         element.appendChild(unreadIndicator);
     }
 
-    if (!typingIndicator && shouldShowTypingIndicator(channel.name)) {
-        const typingInd = document.createElement('div');
-        typingInd.className = 'channel-typing-indicator';
-        typingInd.innerHTML = `
-            <div class="channel-typing-dot"></div>
-            <div class="channel-typing-dot"></div>
-            <div class="channel-typing-dot"></div>
-        `;
-        element.appendChild(typingInd);
-    }
+if (!typingIndicator && shouldShowTypingIndicator(channel.name)) {
+    const typingInd = document.createElement('div');
+    typingInd.className = 'channel-typing-indicator';
+    typingInd.innerHTML = `
+      <div class="channel-typing-dot"></div>
+      <div class="channel-typing-dot"></div>
+      <div class="channel-typing-dot"></div>
+    `;
+    element.appendChild(typingInd);
+  } else if (typingIndicator && shouldRemoveTypingIndicator(channel.name)) {
+    typingIndicator.textContent = '';
+  }
 }
 
 function updateChannelIndicators(element, channel) {
@@ -600,18 +602,18 @@ function updateChannelIndicators(element, channel) {
     const shouldShow = shouldShowTypingIndicator(channel.name);
     const shouldRemove = shouldRemoveTypingIndicator(channel.name);
 
-    if (shouldShow && !typingIndicator) {
-        const typingInd = document.createElement('div');
-        typingInd.className = 'channel-typing-indicator';
-        typingInd.innerHTML = `
-            <div class="channel-typing-dot"></div>
-            <div class="channel-typing-dot"></div>
-            <div class="channel-typing-dot"></div>
-        `;
-        element.appendChild(typingInd);
-    } else if (shouldRemove && typingIndicator) {
-        typingIndicator.remove();
-    }
+if (shouldShow && !typingIndicator) {
+    const typingInd = document.createElement('div');
+    typingInd.className = 'channel-typing-indicator';
+    typingInd.innerHTML = `
+      <div class="channel-typing-dot"></div>
+      <div class="channel-typing-dot"></div>
+      <div class="channel-typing-dot"></div>
+    `;
+    element.appendChild(typingInd);
+  } else if (shouldRemove && typingIndicator) {
+    typingIndicator.textContent = '';
+  }
 }
 
 function shouldShowTypingIndicator(channelName) {

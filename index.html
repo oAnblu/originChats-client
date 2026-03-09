@@ -32,30 +32,30 @@
 
 <body>
     <div id="chat-screen" class="active">
-<div class="header">
-        <div class="menu-btn" onclick="toggleMenu()">
-            <i data-lucide="menu"></i>
-        </div>
-        <div class="server-info">
-            <div class="header-text">
-                <div id="server-name" class="server-name">
-                    <span>Direct Messages</span>
+        <div class="header">
+            <div class="menu-btn" onclick="toggleMenu()">
+                <i data-lucide="menu"></i>
+            </div>
+            <div class="server-info">
+                <div class="header-text">
+                    <div id="server-name" class="server-name">
+                        <span>Direct Messages</span>
+                    </div>
+                    <div id="channel-name" class="channel-name">#home</div>
                 </div>
-                <div id="channel-name" class="channel-name">#home</div>
+            </div>
+            <div class="header-actions">
+                <button class="header-btn" onclick="openMessageSearch()" title="Search Messages">
+                    <i data-lucide="search"></i>
+                </button>
+                <button class="header-btn" onclick="openPinnedMessages()" title="Pinned Messages">
+                    <i data-lucide="pin"></i>
+                </button>
+                <button class="header-btn" onclick="toggleMembersList()" title="Member List">
+                    <i data-lucide="users"></i>
+                </button>
             </div>
         </div>
-        <div class="header-actions">
-            <button class="header-btn" onclick="openMessageSearch()" title="Search Messages">
-                <i data-lucide="search"></i>
-            </button>
-            <button class="header-btn" onclick="openPinnedMessages()" title="Pinned Messages">
-                <i data-lucide="pin"></i>
-            </button>
-            <button class="header-btn" onclick="toggleMembersList()" title="Member List">
-                <i data-lucide="users"></i>
-            </button>
-        </div>
-    </div>
         <div class="overlay" onclick="closeMenu()"></div>
         <div class="content">
             <div class="guild-sidebar">
@@ -126,28 +126,27 @@
                             <i data-lucide="arrow-down"></i>
                         </button>
                         <div id="typing" class="typing"></div>
-<div class="input-area">
-	<div id="reply-bar" class="reply-bar">
-		<div class="reply-bar-content">
-			<i data-lucide="corner-up-left" class="reply-bar-icon" id="reply-bar-icon"></i>
-			<div class="reply-bar-info">
-				<span class="reply-bar-label" id="reply-bar-label">Replying to</span>
-				<span class="reply-bar-text" id="reply-text">
-					<span class="username">user</span>
-				</span>
-				<div class="reply-bar-preview" id="reply-preview"></div>
-			</div>
-		</div>
-		<span class="close-reply"
-			onclick="if(window.editingMessage) window.cancelEdit(); else cancelReply();"
-			title="Cancel">
-			<i data-lucide="x"></i>
-		</span>
-	</div>
+                        <div class="input-area">
+                            <div id="reply-bar" class="reply-bar">
+                                <div class="reply-bar-content">
+                                    <i data-lucide="corner-up-left" class="reply-bar-icon" id="reply-bar-icon"></i>
+                                    <div class="reply-bar-info">
+                                        <span class="reply-bar-label" id="reply-bar-label">Replying to</span>
+                                        <span class="reply-bar-text" id="reply-text">
+                                            <span class="username">user</span>
+                                        </span>
+                                    </div>
+                                </div>
+                                <span class="close-reply"
+                                    onclick="if(window.editingMessage) window.cancelEdit(); else cancelReply();"
+                                    title="Cancel">
+                                    <i data-lucide="x"></i>
+                                </span>
+                            </div>
 
-	<div id="pending-images" class="pending-images-container" style="display: none;"></div>
+                            <div id="pending-images" class="pending-images-container" style="display: none;"></div>
 
-	<div class="input-wrapper">
+                            <div class="input-wrapper">
                                 <button id="upload-btn" class="icon-btn" onclick="triggerImageUpload()" title="Attach">
                                     <i data-lucide="plus"></i>
                                 </button>
