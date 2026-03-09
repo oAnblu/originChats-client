@@ -1,7 +1,7 @@
 function createGuildIcon(icon, name) {
   const iconEl = document.createElement('div');
   iconEl.className = 'guild-icon';
-  
+
   if (icon) {
     if (typeof icon === 'string' && (icon.startsWith('http') || icon.startsWith('data:'))) {
       const img = document.createElement('img');
@@ -20,7 +20,7 @@ function createGuildIcon(icon, name) {
     initials.style.cssText = 'font-weight: 600; font-size: 18px; color: #fff;';
     iconEl.appendChild(initials);
   }
-  
+
   return iconEl;
 }
 
@@ -60,10 +60,10 @@ function renderGuildSidebar() {
     const hasUnread = state.unreadCountsByServer['dms.mistium.com'] > 0 || (typeof hasServerUnread === 'function' && hasServerUnread('dms.mistium.com'));
     const existingDot = homeGuild.querySelector('.guild-unread-dot');
     const existingPing = homeGuild.querySelector('.guild-ping');
-    
+
     if (hasUnread && !existingDot) addUnreadDot(homeGuild);
     else if (!hasUnread && existingDot) existingDot.remove();
-    
+
     if (state.serverPingsByServer['dms.mistium.com'] > 0 && !existingPing) addPingIndicator(homeGuild);
     else if (!(state.serverPingsByServer['dms.mistium.com'] > 0) && existingPing) existingPing.remove();
 
@@ -93,7 +93,8 @@ function renderGuildSidebar() {
         renderGuildSidebar();
         if (state.serverUrl !== 'dms.mistium.com') switchServer('dms.mistium.com');
         setTimeout(() => {
-          const ch = (state.channelsByServer['dms.mistium.com'] || []).find(c => c.name === dmServer.channel);
+          const ch = (state.channelsByServer['dms.mistium.com'] || [])
+            .find(c => c.name === dmServer.channel);
           if (ch) selectChannel(ch);
           else {
             state.pendingMessageFetchesByChannel[`dms.mistium.com:${dmServer.channel}`] = true;
@@ -181,6 +182,8 @@ function showGuildContextMenu(event, server) {
 
 async function leaveServer(url) {
   if (!confirm('Leave this server?')) return;
+  state.leavingServers = state.leavingServers || {};
+  state.leavingServers[url] = true;
   wsSend({ cmd: 'leave' }, url);
   state.servers = state.servers.filter(s => s.url !== url);
   await saveServers();

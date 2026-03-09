@@ -70,7 +70,9 @@ async function detectEmbedType(url) {
             if (ct.startsWith('video/')) return { type: 'video', url };
             if (ct.startsWith('image/')) return { type: 'image', url };
         }
-    } catch (_) { }
+    } catch (err) {
+        console.debug('HEAD request failed for', url, err);
+    }
 
     return { type: 'unknown', url };
 }
@@ -292,7 +294,8 @@ function createFavButton(url, preview) {
         btn.innerHTML = isFav
             ? '<i data-lucide="star" fill="currentColor"></i>'
             : '<i data-lucide="star"></i>';
-    } catch (_) {
+    } catch (e) {
+        console.debug('Failed to parse favorite GIFs:', e);
         btn.innerHTML = '<i data-lucide="star"></i>';
     }
     btn.onclick = (e) => {
@@ -330,7 +333,9 @@ async function isImageUrl(url, timeout = 5000) {
         const ct = res.headers.get('content-type') || '';
         if (ct.startsWith('image/')) return true;
         if (ct.startsWith('video/')) return 'video';
-    } catch (_) { }
+    } catch (e) {
+        console.debug('isImageUrl HEAD request failed:', e);
+    }
 
     // Last resort: try loading as an image element
     return new Promise((resolve) => {
@@ -417,7 +422,9 @@ function _processPotentialImageLink(link, groupContent) {
         // Final fallback: manual HEAD check for video content-type
         fetch(url, { method: 'HEAD', mode: 'cors' })
             .then(res => { if ((res.headers.get('Content-Type') || '').startsWith('video/')) _renderVideoEmbed(link, url); })
-            .catch(() => { });
+            .catch((err) => {
+                console.debug('Fallback HEAD request failed for', url, err);
+            });
         console.debug('Image check failed for URL:', url, err);
     });
 }
@@ -451,13 +458,16 @@ function _processEmbedLinks(embedLinks, groupContent) {
             }
 
             groupContent.appendChild(cloned);
-        } else {
-            createEmbed(url).then(embedEl => {
-                state._embedCache[url] = embedEl ? embedEl.cloneNode(true) : null;
-                if (embedEl) groupContent.appendChild(embedEl);
-            });
-        }
+    } else {
+      createEmbed(url).then(embedEl => {
+        state._embedCache[url] = embedEl ? embedEl.cloneNode(true) : null;
+        if (embedEl) groupContent.appendChild(embedEl);
+      }).catch(err => {
+        console.debug('createEmbed failed for', url, err);
+        state._embedCache[url] = null;
+      });
     }
+  }
 }
 
 // ─── GitHub embeds ───────────────────────────────────────────────────────────
@@ -681,7 +691,11 @@ function formatNumber(num) {
 }
 
 function formatDate(date) {
-    const diff = Date.now() - date;
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+        return 'Unknown';
+    }
+    const diff = Date.now() - date.getTime();
+    if (isNaN(diff) || diff < 0) return 'Just now';
     const minutes = Math.floor(diff / 60_000);
     const hours = Math.floor(diff / 3_600_000);
     const days = Math.floor(diff / 86_400_000);

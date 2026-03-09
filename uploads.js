@@ -184,7 +184,9 @@ function uploadImageWithXHR(file, url, headers) {
                 try {
                     const errorData = JSON.parse(xhr.responseText);
                     errorMessage = errorData.error || errorMessage;
-                } catch (e) {}
+                } catch (e) {
+                    console.debug('Failed to parse error response:', e);
+                }
                 reject(new Error(`${xhr.status}: ${errorMessage}`));
             }
         };

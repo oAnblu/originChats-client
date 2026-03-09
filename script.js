@@ -46,7 +46,9 @@ let state = {
     autoScrollEnabled: true,
     _pendingChannelSwitch: null
 };
-window.state = state;
+if (typeof window !== 'undefined' && window.location && window.location.hostname === 'localhost') {
+    window.state = state;
+}
 
 const pendingReplyTimeouts = {};
 let originFS = null;
@@ -437,10 +439,16 @@ window.onload = async function () {
     }
 
     const savedLastChannels = localStorage.getItem('originchats_last_channels');
-    if (savedLastChannels) state.lastChannelByServer = JSON.parse(savedLastChannels);
+    if (savedLastChannels) {
+        try { state.lastChannelByServer = JSON.parse(savedLastChannels); }
+        catch (e) { console.warn('Failed to parse last channels:', e); state.lastChannelByServer = {}; }
+    }
 
     const savedDMServers = localStorage.getItem('originchats_dm_servers');
-    if (savedDMServers) state.dmServers = JSON.parse(savedDMServers);
+    if (savedDMServers) {
+        try { state.dmServers = JSON.parse(savedDMServers); }
+        catch (e) { console.warn('Failed to parse DM servers:', e); state.dmServers = []; }
+    }
 
     state.readTimesByServer = await loadReadTimes();
 
@@ -1117,9 +1125,25 @@ function renderServerDropdown() {
     renderGuildSidebar();
 }
 
+function isValidServerUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    const trimmed = url.trim();
+    if (trimmed.length === 0 || trimmed.length > 253) return false;
+    if (trimmed.includes('/') || trimmed.includes(' ')) return false;
+    const hostnameRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$/;
+    return hostnameRegex.test(trimmed);
+}
+
 function addNewServer() {
     const url = prompt('Enter server URL (e.g., chats.mistium.com):');
-    if (url && url.trim()) switchServer(url.trim());
+    if (url && url.trim()) {
+        const trimmed = url.trim();
+        if (!isValidServerUrl(trimmed)) {
+            showError('Invalid server URL format');
+            return;
+        }
+        switchServer(trimmed);
+    }
 }
 
 function openDiscoveryModal() {
@@ -1232,8 +1256,7 @@ async function joinDiscoveryServer(server) {
 
 function switchServer(url) {
     updateCurrentChannelReadTime();
-    console.log('[DEBUG] switchServer called with url:', url, 'current state.switchingServer:', state.switchingServer);
-    if (state.switchingServer) { console.log('[DEBUG] switchServer blocked - already switching'); return; }
+    if (state.switchingServer) return;
     state.switchingServer = true;
     const originalUrl = state.serverUrl;
 
@@ -1269,7 +1292,8 @@ function switchServer(url) {
     document.getElementById('server-name').innerHTML = `<span>${serverName}</span>`;
 
     document.querySelectorAll('.server-settings-btn').forEach(btn => {
-        btn.style.display = url === 'dms.mistium.com' ? 'none' : 'flex';
+        const isOwner = state.currentUser?.roles?.includes('owner');
+        btn.style.display = (url === 'dms.mistium.com' || !isOwner) ? 'none' : 'flex';
     });
 
     const channelHeaderName = document.getElementById('channel-header-name');
@@ -1373,23 +1397,25 @@ function connectToServer(serverUrl) {
         delete state.loadingChannelsByServer[url];
     };
 
-    const closeHandler = function () {
-        console.log(`WebSocket closed for ${url}`);
-        wsConnections[url].status = 'error';
-        wsStatus[url] = 'error';
-        cleanupPendingState();
-        renderGuildSidebar();
-        if (url === state.serverUrl) { console.log(`Auto-reconnecting to ${url}...`); scheduleReconnect(url); }
-    };
+  const closeHandler = function () {
+    console.log(`WebSocket closed for ${url}`);
+    const conn = wsConnections[url];
+    if (conn) conn.status = 'error';
+    wsStatus[url] = 'error';
+    cleanupPendingState();
+    renderGuildSidebar();
+    if (url === state.serverUrl) { console.log(`Auto-reconnecting to ${url}...`); scheduleReconnect(url); }
+  };
 
-    const errorHandler = function (error) {
-        console.error(`WebSocket error for ${url}:`, error);
-        wsConnections[url].status = 'error';
-        wsStatus[url] = 'error';
-        cleanupPendingState();
-        renderGuildSidebar();
-        if (state.serverUrl === url) showError('Connection error');
-    };
+  const errorHandler = function (error) {
+    console.error(`WebSocket error for ${url}:`, error);
+    const conn = wsConnections[url];
+    if (conn) conn.status = 'error';
+    wsStatus[url] = 'error';
+    cleanupPendingState();
+    renderGuildSidebar();
+    if (state.serverUrl === url) showError('Connection error');
+  };
 
     const messageHandler = function (event) {
         handleMessage(JSON.parse(event.data), url);
@@ -1589,7 +1615,9 @@ async function handleMessage(msg, serverUrl) {
             if (authRetryTimeouts[serverUrl]) { clearTimeout(authRetryTimeouts[serverUrl]); authRetryTimeouts[serverUrl] = null; }
 
             serverValidatorKeys[serverUrl] = msg.val.validator_key;
-            saveServer(server);
+            if (!state.leavingServers || !state.leavingServers[serverUrl]) {
+                saveServer(server);
+            }
 
             const serverChannelHeader = document.getElementById('server-channel-header');
             if (serverUrl === 'dms.mistium.com') {
@@ -1966,7 +1994,12 @@ async function handleMessage(msg, serverUrl) {
 
         case 'roles_list':
             if (window.serverSettingsState && msg.roles) {
-                window.serverSettingsState.roles = msg.roles;
+                const rolesArray = Object.entries(msg.roles).map(([name, data]) => ({
+                    name: name,
+                    description: data.description || '',
+                    color: data.color || null
+                }));
+                window.serverSettingsState.roles = rolesArray;
                 if (typeof window.renderRoles === 'function') window.renderRoles();
             }
             break;
@@ -2212,11 +2245,17 @@ async function selectChannel(channel) {
     if (targetItem) targetItem.classList.add('active');
 
     state._pendingChannelSwitch = channelKey;
-    state.autoScrollEnabled = true;
-    if (!state.messagesByServer[state.serverUrl]?.[channel.name]) {
+    const messagesContainerForAutoScroll = document.getElementById('messages');
+    if (messagesContainerForAutoScroll) {
+        state.autoScrollEnabled = isElementNearBottom(messagesContainerForAutoScroll, 80);
+    } else {
+        state.autoScrollEnabled = true;
+    }
+    const isDMSHomeChannel = state.serverUrl === 'dms.mistium.com' && channel.name === 'home';
+    if (!isDMSHomeChannel && !state.messagesByServer[state.serverUrl]?.[channel.name]) {
         state.pendingMessageFetchesByChannel[channelKey] = true;
         wsSend({ cmd: 'messages_get', channel: channel.name, limit: 30 }, state.serverUrl);
-    } else {
+    } else if (!isDMSHomeChannel) {
         renderMessages();
         state._pendingChannelSwitch = null;
     }
@@ -2224,7 +2263,7 @@ async function selectChannel(channel) {
     renderMembers(channel);
     updateTypingIndicator();
 
-    window.canSendMessages = checkPermission(channel.permissions?.send || [], state.currentUser.roles);
+    window.canSendMessages = checkPermission(channel.permissions?.send || [], state.currentUser?.roles);
     const textbox = document.getElementById("message-input");
     textbox.value = "";
     textbox.placeholder = window.canSendMessages ? `Type a message...` : `Cannot send messages here.`;
@@ -2955,7 +2994,7 @@ async function renderMessages(shouldScrollToBottom = true, isLoadingOlder = fals
         scrollToBottom();
         let observer;
         try {
-            observer = new MutationObserver(() => { if (!state._olderLoading) scrollToBottom(); });
+                observer = new MutationObserver(() => { if (!state._olderLoading && state.autoScrollEnabled) scrollToBottom(); });
             observer.observe(container, { childList: true, subtree: true });
         } catch { }
         setTimeout(() => { if (observer) observer.disconnect(); }, 2000);
@@ -3346,30 +3385,35 @@ async function sendMessage() {
     if (!hasText && !hasImages) return;
     if (!state.currentChannel) return;
 
-    if (window.editingMessage) {
-        const msgId = window.editingMessage.id;
-        wsSend({ cmd: 'message_edit', id: msgId, channel: state.currentChannel.name, content }, state.serverUrl);
-        const msg = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name]?.find(m => m.id === msgId);
-        if (msg) {
-            msg.edited = true; msg.editedAt = Date.now(); msg.content = content;
-            const wrapper = document.querySelector(`[data-msg-id="${msgId}"]`);
-            if (wrapper) {
-                const header = wrapper.querySelector('.message-header');
-                if (header && !header.querySelector('.edited-indicator')) {
-                    const editedIndicator = document.createElement('span');
-                    editedIndicator.className = 'edited-indicator';
-                    editedIndicator.textContent = '(edited)';
-                    header.appendChild(editedIndicator);
-                }
-            }
-        }
-        window.editingMessage = null;
-        originalInputValue = '';
-        document.getElementById('reply-bar').classList.remove('active', 'editing-mode');
-        input.value = '';
-        input.style.height = 'auto';
-        return;
+  if (window.editingMessage) {
+    const msgId = window.editingMessage.id;
+    const sent = wsSend({ cmd: 'message_edit', id: msgId, channel: state.currentChannel.name, content }, state.serverUrl);
+    if (!sent) {
+      showError('Failed to edit message - not connected to server');
+      return;
     }
+    const msg = state.messagesByServer[state.serverUrl]?.[state.currentChannel.name]?.find(m => m.id === msgId);
+    if (msg) {
+      msg.edited = true; msg.editedAt = Date.now(); msg.content = content;
+      const wrapper = document.querySelector(`[data-msg-id="${msgId}"]`);
+      if (wrapper) {
+        const header = wrapper.querySelector('.message-header');
+        if (header && !header.querySelector('.edited-indicator')) {
+          const editedIndicator = document.createElement('span');
+          editedIndicator.className = 'edited-indicator';
+          editedIndicator.textContent = '(edited)';
+          header.appendChild(editedIndicator);
+        }
+      }
+    }
+    window.editingMessage = null;
+    originalInputValue = '';
+    const replyBar = document.getElementById('reply-bar');
+    if (replyBar) replyBar.classList.remove('active', 'editing-mode');
+    input.value = '';
+    input.style.height = 'auto';
+    return;
+  }
 
     let finalContent = content;
     if (hasImages) {
@@ -3384,12 +3428,16 @@ async function sendMessage() {
     const msg = { cmd: 'message_new', channel: state.currentChannel.name, content: finalContent };
     if (state.replyTo) { msg.reply_to = state.replyTo.id; cancelReply(); }
 
-    if (state.serverUrl === 'dms.mistium.com' && state.currentChannel?.name === 'notes' && window.notesChannel) {
-        const savedMsg = await window.notesChannel.saveMessage(finalContent, state.currentUser?.username ?? "originChats");
-        if (savedMsg) { state.messagesByServer[state.serverUrl][state.currentChannel.name].push(savedMsg); appendMessage(savedMsg); }
-    } else {
-        wsSend(msg, state.serverUrl);
+  if (state.serverUrl === 'dms.mistium.com' && state.currentChannel?.name === 'notes' && window.notesChannel) {
+    const savedMsg = await window.notesChannel.saveMessage(finalContent, state.currentUser?.username ?? "originChats");
+    if (savedMsg) { state.messagesByServer[state.serverUrl][state.currentChannel.name].push(savedMsg); appendMessage(savedMsg); }
+  } else {
+    const sent = wsSend(msg, state.serverUrl);
+    if (!sent) {
+      showError('Failed to send message - not connected to server');
+      return;
     }
+  }
 
     input.value = '';
     input.style.height = 'auto';
@@ -3398,6 +3446,7 @@ async function sendMessage() {
 
 let typing = false;
 let lastTyped = 0;
+let typingIntervalId = null;
 
 function setupTypingListener() {
     document.getElementById("message-input").addEventListener("input", () => {
@@ -3407,8 +3456,9 @@ function setupTypingListener() {
 }
 
 function watchForStopTyping() {
-    const interval = setInterval(() => {
-        if (Date.now() - lastTyped > 1200) { typing = false; clearInterval(interval); }
+    if (typingIntervalId) clearInterval(typingIntervalId);
+    typingIntervalId = setInterval(() => {
+        if (Date.now() - lastTyped > 1200) { typing = false; clearInterval(typingIntervalId); typingIntervalId = null; }
     }, 300);
 }
 
@@ -4161,49 +4211,49 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function toggleUploadDropdown() {
-	const dropdown = document.getElementById('upload-dropdown');
-	const btn = document.getElementById('upload-btn');
+    const dropdown = document.getElementById('upload-dropdown');
+    const btn = document.getElementById('upload-btn');
 
-	if (dropdown.style.display === 'block') {
-		dropdown.style.display = 'none';
-		return;
-	}
+    if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+        return;
+    }
 
-	dropdown.style.display = 'block';
-	const rect = btn.getBoundingClientRect();
-	dropdown.style.left = rect.left + 'px';
-	dropdown.style.top = (rect.top - dropdown.offsetHeight - 20) + 'px';
+    dropdown.style.display = 'block';
+    const rect = btn.getBoundingClientRect();
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.top = (rect.top - dropdown.offsetHeight - 20) + 'px';
 
-	if (window.lucide) window.lucide.createIcons({ root: dropdown });
+    if (window.lucide) window.lucide.createIcons({ root: dropdown });
 }
 
 function triggerImageUpload() {
-	document.getElementById('upload-dropdown').style.display = 'none';
-	document.getElementById('image-upload-input').click();
+    document.getElementById('upload-dropdown').style.display = 'none';
+    document.getElementById('image-upload-input').click();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-	const uploadBtn = document.getElementById('upload-btn');
-	const dropdown = document.getElementById('upload-dropdown');
+    const uploadBtn = document.getElementById('upload-btn');
+    const dropdown = document.getElementById('upload-dropdown');
 
-	uploadBtn.addEventListener('click', (e) => {
-		e.stopPropagation();
-		toggleUploadDropdown();
-	});
+    uploadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleUploadDropdown();
+    });
 
-	dropdown.querySelectorAll('.context-menu-item').forEach(item => {
-		item.addEventListener('click', (e) => {
-			e.stopPropagation();
-		});
-	});
+    dropdown.querySelectorAll('.context-menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    });
 
-	document.addEventListener('click', (e) => {
-		if (!dropdown.contains(e.target) && !uploadBtn.contains(e.target)) {
-			dropdown.style.display = 'none';
-		}
-	});
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target) && !uploadBtn.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
 
-	const amountInput = document.getElementById('gift-amount');
+    const amountInput = document.getElementById('gift-amount');
     if (amountInput) {
         amountInput.addEventListener('input', updateGiftSummary);
     }
@@ -4223,10 +4273,10 @@ document.addEventListener('DOMContentLoaded', () => {
             option.classList.add('selected');
             option.querySelector('input').checked = true;
         });
-	if (option.querySelector('input').checked) {
-			option.classList.add('selected');
-		}
-	});
+        if (option.querySelector('input').checked) {
+            option.classList.add('selected');
+        }
+    });
 });
 
 function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); }
@@ -4400,22 +4450,24 @@ function createGroup() {
 }
 
 window.addEventListener('focus', function () {
-    const allServerUrls = [...state.servers.map(s => s.url), 'dms.mistium.com'];
-    allServerUrls.forEach(url => { if (!wsConnections[url] || wsConnections[url].status !== 'connected') connectToServer(url); });
-    setTimeout(() => {
-        allServerUrls.forEach(url => {
-            const conn = wsConnections[url];
-            if (conn && conn.status === 'connected') {
-                (state.channelsByServer[url] || []).forEach(channel => {
-                    const channelKey = `${url}:${channel.name}`;
-                    if (state.messagesByServer[url]?.[channel.name] && !state.pendingMessageFetchesByChannel[channelKey]) {
-                        state.pendingMessageFetchesByChannel[channelKey] = true;
-                        wsSend({ cmd: 'messages_get', channel: channel.name }, url);
-                    }
-                });
-            }
+  const allServerUrls = [...state.servers.map(s => s.url), 'dms.mistium.com'];
+  allServerUrls.forEach(url => { if (!wsConnections[url] || wsConnections[url].status !== 'connected') connectToServer(url); });
+  setTimeout(() => {
+    allServerUrls.forEach(url => {
+      const conn = wsConnections[url];
+      if (conn && conn.status === 'connected') {
+        (state.channelsByServer[url] || []).forEach(channel => {
+          const channelKey = `${url}:${channel.name}`;
+          if (url === 'dms.mistium.com' && channel.name === 'home') return;
+          if (state.messagesByServer[url]?.[channel.name] && !state.pendingMessageFetchesByChannel[channelKey]) {
+            state.pendingMessageFetchesByChannel[channelKey] = true;
+            const sent = wsSend({ cmd: 'messages_get', channel: channel.name }, url);
+            if (!sent) delete state.pendingMessageFetchesByChannel[channelKey];
+          }
         });
-    }, 500);
+      }
+    });
+  }, 500);
 });
 
 window.selectEmoji = selectEmoji;

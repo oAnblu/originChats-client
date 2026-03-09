@@ -33,6 +33,8 @@ function proxyImageUrl(url) {
     try {
         const urlObj = new URL(url);
         if (TRUSTED_DOMAINS.includes(urlObj.hostname)) return url;
-    } catch (_) {}
+    } catch (err) {
+        console.debug('URL parsing failed for proxy:', url, err);
+    }
     return `https://wsrv.nl/?url=${encodeURIComponent(url)}`;
 }

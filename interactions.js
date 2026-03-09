@@ -539,7 +539,7 @@ function renderReactions(msg, container) {
 
         const tooltip = document.createElement('div');
         tooltip.className = 'reaction-tooltip';
-        tooltip.innerHTML = users.map(u => u === state.currentUser?.username ? `${u} (you)` : u).join(', ');
+        tooltip.textContent = users.map(u => u === state.currentUser?.username ? `${u} (you)` : u).join(', ');
         reactionEl.appendChild(tooltip);
 
         reactionEl.addEventListener('click', (e) => { e.stopPropagation(); toggleReaction(msg.id, emoji); });
@@ -866,9 +866,15 @@ function closeGifPicker() {
 }
 
 async function sendGif(url) {
-    const input = document.getElementById('message-input');
+  const input = document.getElementById('message-input');
+  if (!input) return;
+  try {
     input.value = await resolveTenorGifUrl(url);
     sendMessage();
+  } catch (err) {
+    console.error('Failed to resolve Tenor GIF URL:', err);
+    if (window.showError) window.showError('Failed to send GIF');
+  }
 }
 
 // ─── Image modal ──────────────────────────────────────────────────────────────
