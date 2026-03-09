@@ -1708,7 +1708,9 @@ async function handleMessage(msg, serverUrl) {
                 }
                 state._olderStart[ch] = req.start;
                 state._loadingOlder[ch] = null;
-                state._olderLoading = false;
+                if (state.serverUrl === serverUrl && state.currentChannel && ch === state.currentChannel?.name) {
+                    renderMessages(false, true);
+                }
             } else {
                 state.messagesByServer[serverUrl][ch] = msg.messages;
                 if (state.pendingMessageFetchesByChannel[channelKey]) delete state.pendingMessageFetchesByChannel[channelKey];
@@ -2533,14 +2535,7 @@ function updateScrollButton() {
     scrollBtn.style.display = isNearBottom ? 'none' : 'flex';
 }
 
-function attachImageScrollHandler(img) {
-    const handler = () => scrollToBottom();
-    img.addEventListener('load', handler, { once: true });
-    img.addEventListener('error', handler, { once: true });
-}
-
 window.scrollToBottom = scrollToBottom;
-window.attachImageScrollHandler = attachImageScrollHandler;
 
 function updateAllTimestamps() {
     document.querySelectorAll('[data-timestamp]').forEach(el => {
@@ -2856,7 +2851,7 @@ function makeMessageElement(msg, isSameUserRecent, options = {}) {
 }
 window.makeMessageElement = makeMessageElement;
 
-async function renderMessages(shouldScrollToBottom = true) {
+async function renderMessages(shouldScrollToBottom = true, isLoadingOlder = false) {
     if (state.renderInProgress) return;
     state.renderInProgress = true;
 
@@ -2924,7 +2919,23 @@ async function renderMessages(shouldScrollToBottom = true) {
         lastUser = msg.user; lastTime = msg.timestamp;
     }
 
-    if (fragment.childNodes.length > 0) container.appendChild(fragment);
+    if (fragment.childNodes.length > 0) {
+        if (isLoadingOlder) {
+            const oldScrollHeight = container.scrollHeight;
+            const oldScrollTop = container.scrollTop;
+            const firstMsgElement = container.querySelector('[data-msg-id]');
+            if (firstMsgElement) {
+                container.insertBefore(fragment, firstMsgElement);
+                const newScrollHeight = container.scrollHeight;
+                const heightAdded = newScrollHeight - oldScrollHeight;
+                container.scrollTop = oldScrollTop + heightAdded;
+            } else {
+                container.appendChild(fragment);
+            }
+        } else {
+            container.appendChild(fragment);
+        }
+    }
 
     if (shouldScrollToBottom || isInitialRender) {
         scrollToBottom();
@@ -2933,16 +2944,14 @@ async function renderMessages(shouldScrollToBottom = true) {
             observer = new MutationObserver(() => { if (!state._olderLoading) scrollToBottom(); });
             observer.observe(container, { childList: true, subtree: true });
         } catch { }
-        container.querySelectorAll('img').forEach(img => {
-            if (!img.complete) {
-                attachImageScrollHandler(img);
-            }
-        });
         setTimeout(() => { if (observer) observer.disconnect(); }, 2000);
     }
 
     setupImageLazyLoading(container);
     updateTypingIndicator();
+    if (isLoadingOlder) {
+        state._olderLoading = false;
+    }
     state.renderInProgress = false;
 }
 
@@ -2977,6 +2986,8 @@ function appendMessage(msg) {
     const isNearBottom = isElementNearBottom(container, 80);
     if (isNearBottom) {
         state.autoScrollEnabled = true;
+    } else {
+        state.autoScrollEnabled = false;
     }
     if (state.autoScrollEnabled) {
         scrollToBottom();
@@ -4135,9 +4146,74 @@ document.addEventListener('DOMContentLoaded', function () {
     if (inputArea) { inputArea.addEventListener('dragover', handleDragOver); inputArea.addEventListener('drop', handleDrop); }
 });
 
-async function triggerImageUpload() {
-    document.getElementById('image-upload-input').click();
+function toggleUploadDropdown() {
+	const dropdown = document.getElementById('upload-dropdown');
+	const btn = document.getElementById('upload-btn');
+
+	if (dropdown.style.display === 'block') {
+		dropdown.style.display = 'none';
+		return;
+	}
+
+	dropdown.style.display = 'block';
+	const rect = btn.getBoundingClientRect();
+	dropdown.style.left = rect.left + 'px';
+	dropdown.style.top = (rect.top - dropdown.offsetHeight - 20) + 'px';
+
+	if (window.lucide) window.lucide.createIcons({ root: dropdown });
 }
+
+function triggerImageUpload() {
+	document.getElementById('upload-dropdown').style.display = 'none';
+	document.getElementById('image-upload-input').click();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+	const uploadBtn = document.getElementById('upload-btn');
+	const dropdown = document.getElementById('upload-dropdown');
+
+	uploadBtn.addEventListener('click', (e) => {
+		e.stopPropagation();
+		toggleUploadDropdown();
+	});
+
+	dropdown.querySelectorAll('.context-menu-item').forEach(item => {
+		item.addEventListener('click', (e) => {
+			e.stopPropagation();
+		});
+	});
+
+	document.addEventListener('click', (e) => {
+		if (!dropdown.contains(e.target) && !uploadBtn.contains(e.target)) {
+			dropdown.style.display = 'none';
+		}
+	});
+
+	const amountInput = document.getElementById('gift-amount');
+    if (amountInput) {
+        amountInput.addEventListener('input', updateGiftSummary);
+    }
+
+    const noteInput = document.getElementById('gift-note');
+    const noteCount = document.getElementById('gift-note-count');
+    if (noteInput && noteCount) {
+        noteInput.addEventListener('input', () => {
+            noteCount.textContent = `${noteInput.value.length}/50`;
+        });
+    }
+
+    const expiryOptions = document.querySelectorAll('.expiry-option');
+    expiryOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            expiryOptions.forEach(opt => opt.classList.remove('selected'));
+            option.classList.add('selected');
+            option.querySelector('input').checked = true;
+        });
+	if (option.querySelector('input').checked) {
+			option.classList.add('selected');
+		}
+	});
+});
 
 function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); }
 function handleDrop(e) {

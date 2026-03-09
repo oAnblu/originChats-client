@@ -35,6 +35,12 @@ async function detectEmbedType(url) {
     const ytMatch = url.match(YOUTUBE_REGEX);
     if (ytMatch) return { type: 'youtube', videoId: ytMatch[1] };
 
+    const match = url.match(/rotur\.dev\/gift\?code=([A-Z0-9-]+)/i);
+    if (match) {
+        const code = match[1];
+        return { type: 'gift', code, url };
+    }
+
     const commitMatch = url.match(/github\.com\/([^/]+)\/([^/]+)\/commit\/([a-f0-9]{7,40})/i);
     if (commitMatch) {
         return { type: 'github_commit', owner: commitMatch[1], repo: commitMatch[2], sha: commitMatch[3], url };
@@ -75,6 +81,7 @@ async function createEmbed(url) {
     const embedInfo = await detectEmbedType(url);
     switch (embedInfo.type) {
         case 'youtube': return createYouTubeEmbed(embedInfo.videoId, url);
+        case 'gift': return await createGiftEmbed(embedInfo.code, url);
         case 'tenor': return await createTenorEmbed(embedInfo.id, url);
         case 'github': return await createGitHubEmbed(embedInfo.path, url);
         case 'github_commit': return await createGitHubCommitEmbed(embedInfo.owner, embedInfo.repo, embedInfo.sha, url);
@@ -82,8 +89,6 @@ async function createEmbed(url) {
         case 'image': return null;
     }
 }
-
-// ─── Embed renderers ─────────────────────────────────────────────────────────
 
 function createYouTubeEmbed(videoId, originalUrl) {
     const container = document.createElement('div');
@@ -151,7 +156,6 @@ async function createTenorEmbed(tenorId, originalUrl) {
         img.alt = altDiv.innerHTML;
         img.className = 'tenor-gif';
         img.loading = 'lazy';
-        if (window.attachImageScrollHandler) window.attachImageScrollHandler(img);
         img.onerror = () => {
             const fallback = document.createElement('a');
             fallback.href = originalUrl;
@@ -378,13 +382,26 @@ function _processPotentialImageLink(link, groupContent) {
         img.className = 'message-image';
         img.dataset.imageUrl = url;
 
+        const messagesEl = document.getElementById('messages');
+        const wasNearBottom = messagesEl && (messagesEl.scrollHeight - (messagesEl.scrollTop + messagesEl.clientHeight)) < 100;
+        const oldScrollTop = messagesEl ? messagesEl.scrollTop : 0;
+        const imgTop = link.getBoundingClientRect().top;
+        const containerTop = messagesEl ? messagesEl.getBoundingClientRect().top : 0;
+
+        img.addEventListener('load', () => {
+            if (wasNearBottom) {
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+            } else if (messagesEl) {
+                const newImgHeight = img.offsetHeight;
+                messagesEl.scrollTop = oldScrollTop + newImgHeight;
+            }
+        });
+
         img.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             if (window.openImageModal) window.openImageModal(img.dataset.imageUrl);
         });
-
-        if (window.attachImageScrollHandler) window.attachImageScrollHandler(img);
 
         if (window.createFavButton) {
             const favBtn = window.createFavButton(url, url);

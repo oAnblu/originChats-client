@@ -147,7 +147,7 @@
                             <div id="pending-images" class="pending-images-container" style="display: none;"></div>
 
                             <div class="input-wrapper">
-                                <button id="upload-btn" class="icon-btn" onclick="triggerImageUpload()" title="Attach">
+                                <button id="upload-btn" class="icon-btn" title="Attach">
                                     <i data-lucide="plus"></i>
                                 </button>
                                 <textarea id="message-input" placeholder="Type a message..." rows="1"></textarea>
@@ -169,6 +169,17 @@
                                     <i data-lucide="clock"></i>
                                     <span id="rate-limit-text">Rate limited</span>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div id="upload-dropdown" class="context-menu" style="display: none;">
+                            <div class="context-menu-item" onclick="triggerImageUpload()">
+                                <i data-lucide="image"></i>
+                                <span>Upload Image</span>
+                            </div>
+                            <div class="context-menu-item" onclick="openGiftModal()">
+                                <i data-lucide="gift"></i>
+                                <span>Send Gift</span>
                             </div>
                         </div>
 
@@ -960,6 +971,74 @@
             </div>
         </div>
     </div>
+
+    <div id="gift-modal" class="modal-overlay gift-modal" onclick="if(event.target === this) closeGiftModal()">
+        <div class="gift-modal-container">
+            <button class="modal-close-btn" onclick="closeGiftModal()">
+                <i data-lucide="x"></i>
+            </button>
+
+            <div class="gift-modal-header">
+                <h2>Send Gift</h2>
+                <p>Create a gift for someone to claim</p>
+            </div>
+
+            <div class="gift-modal-content">
+                <div class="gift-form-group">
+                    <label>Amount (RC)</label>
+                    <input type="number" id="gift-amount" min="0.01" step="0.01" placeholder="0.00">
+                </div>
+
+                <div class="gift-form-group">
+                    <label>Note (optional)</label>
+                    <textarea id="gift-note" rows="2" maxlength="50" placeholder="Add a personal message..."></textarea>
+                    <span class="char-count" id="gift-note-count">0/50</span>
+                </div>
+
+                <div class="gift-form-group">
+                    <label>Expiration</label>
+                    <div class="gift-expiry-options">
+                        <label class="expiry-option">
+                            <input type="radio" name="gift-expiry" value="0" checked>
+                            <span>Never</span>
+                        </label>
+                        <label class="expiry-option">
+                            <input type="radio" name="gift-expiry" value="24">
+                            <span>1 Day</span>
+                        </label>
+                        <label class="expiry-option">
+                            <input type="radio" name="gift-expiry" value="168">
+                            <span>1 Week</span>
+                        </label>
+                        <label class="expiry-option">
+                            <input type="radio" name="gift-expiry" value="720">
+                            <span>30 Days</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="gift-summary">
+                    <div class="summary-row">
+                        <span>Amount</span>
+                        <span id="summary-amount">0.00 RC</span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Tax (1%)</span>
+                        <span id="summary-tax">0.00 RC</span>
+                    </div>
+                    <div class="summary-row total">
+                        <span>Total</span>
+                        <span id="summary-total">0.00 RC</span>
+                    </div>
+                </div>
+
+                <button class="btn btn-full btn-primary" id="submit-gift-btn" onclick="submitGift()">
+                    Create Gift
+                </button>
+            </div>
+        </div>
+    </div>
+    </div>
     <div id="image-modal" class="image-modal" onclick="if(event.target === this) closeImageModal()">
         <div class="image-modal-content">
             <button class="modal-close-btn" onclick="closeImageModal()">
@@ -991,6 +1070,7 @@
     <script src="guilds.js" defer></script>
     <script src="script.js" defer></script>
     <script src="serverSettings.js" defer></script>
+    <script src="gifts.js" defer></script>
 
     <!-- Highlight.js with auto-detection -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>

@@ -1854,6 +1854,297 @@ a {
     transform: scale(0.95);
 }
 
+#upload-dropdown {
+    min-width: 180px;
+}
+
+#upload-dropdown .context-menu-item {
+    cursor: pointer;
+}
+
+.gift-modal {
+    align-items: center;
+    justify-content: center;
+}
+
+.gift-modal-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    max-width: 480px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.gift-modal-header {
+    padding: 24px 24px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.gift-modal-header h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+}
+
+.gift-modal-header p {
+    font-size: 14px;
+    color: var(--text-dim);
+}
+
+.gift-modal-content {
+    padding: 24px;
+}
+
+.gift-form-group {
+    margin-bottom: 20px;
+}
+
+.gift-form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.gift-form-group input,
+.gift-form-group textarea {
+    width: 100%;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    color: var(--text);
+    font-size: 16px;
+    transition: border-color var(--anim-fast) var(--ease-standard);
+}
+
+.gift-form-group input:focus,
+.gift-form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent, #9b87f5);
+}
+
+.gift-form-group textarea {
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+}
+
+.char-count {
+    display: block;
+    text-align: right;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+}
+
+.gift-expiry-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.expiry-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: var(--surface-light);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--anim-fast) var(--ease-standard);
+    font-size: 14px;
+    color: var(--text);
+    flex: 1;
+    min-width: 80px;
+    justify-content: center;
+}
+
+.expiry-option:hover {
+    border-color: var(--interactive-hover-bg);
+}
+
+.expiry-option input[type="radio"] {
+    display: none;
+}
+
+.expiry-option.selected {
+    border-color: var(--accent, #9b87f5);
+    background: rgba(155, 135, 245, 0.1);
+}
+
+.gift-summary {
+    background: var(--surface-light);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.summary-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    font-size: 15px;
+    color: var(--text-dim);
+}
+
+.summary-row.total {
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    padding-top: 12px;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 17px;
+}
+
+.btn-full {
+    width: 100%;
+}
+
+.gift-embed {
+    max-width: 400px !important;
+}
+
+.gift-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+.gift-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(155, 135, 245, 0.3), transparent);
+}
+
+.gift-error {
+    background: var(--surface-light);
+    border-color: var(--danger);
+}
+
+.gift-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    /* margin-bottom: 16px; */
+}
+
+.gift-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(155, 135, 245, 0.3) 0%, rgba(61, 165, 92, 0.3) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+}
+
+.gift-card-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.gift-card-body {
+    margin-bottom: 16px;
+}
+
+.gift-amount {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+}
+
+.gift-note {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    font-style: italic;
+}
+
+.gift-expiry {
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    display: inline-block;
+}
+
+.gift-claim-btn {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent, #9b87f5);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--anim-fast) var(--ease-standard);
+}
+
+.gift-claim-btn:hover:not(:disabled) {
+    background: rgba(155, 135, 245, 0.8);
+    transform: translateY(-1px);
+}
+
+.gift-claim-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.gift-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.gift-status.claimed {
+    background: var(--success);
+    color: #fff;
+}
+
+.gift-status.cancelled {
+    background: var(--danger);
+    color: #fff;
+}
+
+.gift-status.expired {
+    background: var(--warning);
+    color: #000000;
+}
+
+.gift-modal .modal-close-btn {
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -1871,7 +2162,7 @@ a {
 }
 
 .modal-overlay.active {
-    display: flex;
+    display: flex !important;
     opacity: 1;
 }
 
