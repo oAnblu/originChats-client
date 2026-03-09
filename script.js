@@ -1872,16 +1872,16 @@ async function handleMessage(msg, serverUrl) {
             break;
         }
 
-case 'message_delete': {
-    if (!state.messagesByServer[serverUrl]?.[msg.channel]) break;
-    state.messagesByServer[serverUrl][msg.channel] = state.messagesByServer[serverUrl][msg.channel].filter(m => m.id !== msg.id);
-    
-    if (state.serverUrl === serverUrl && msg.channel === state.currentChannel?.name) {
-      const messageEl = document.querySelector(`[data-msg-id="${msg.id}"]`);
-      if (messageEl) messageEl.remove();
-    }
-    break;
-  }
+        case 'message_delete': {
+            if (!state.messagesByServer[serverUrl]?.[msg.channel]) break;
+            state.messagesByServer[serverUrl][msg.channel] = state.messagesByServer[serverUrl][msg.channel].filter(m => m.id !== msg.id);
+
+            if (state.serverUrl === serverUrl && msg.channel === state.currentChannel?.name) {
+                const messageEl = document.querySelector(`[data-msg-id="${msg.id}"]`);
+                if (messageEl) messageEl.remove();
+            }
+            break;
+        }
 
         case 'message_pin':
         case 'message_unpin': {
@@ -4623,15 +4623,27 @@ function applyTheme(themeName) {
     for (const [property, value] of Object.entries(theme)) root.style.setProperty(property, value);
 }
 
-function applyWallpaper(dataUrl, opacity = '100') {
+function applyWallpaper(dataUrl, opacity = 100) {
     const messagesContainer = document.querySelector('.messages-container');
     if (!messagesContainer) return;
+
     if (dataUrl) {
-        Object.assign(messagesContainer.style, { backgroundImage: `url(${dataUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', backgroundAttachment: 'scroll', opacity: opacity / 100 });
+        const dim = 1 - (opacity / 100);
+
+        Object.assign(messagesContainer.style, {
+            backgroundImage: `
+                linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim})),
+                url(${dataUrl})
+            `,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            backgroundAttachment: 'scroll'
+        });
+
         messagesContainer.classList.add('has-wallpaper');
     } else {
         messagesContainer.style.backgroundImage = 'none';
-        messagesContainer.style.opacity = '1';
         messagesContainer.classList.remove('has-wallpaper');
         messagesContainer.style.boxShadow = 'none';
     }
