@@ -41,9 +41,11 @@ function parseMarkdown(text, embedLinks) {
     text = text.replace(/^#{4} (.*)$/gm, (match, content) => `<h4>${escapeHtml(content)}</h4>`);
     text = text.replace(/^### (.*)$/gm, (match, content) => `<h3>${escapeHtml(content)}</h3>`);
     text = text.replace(/^## (.*)$/gm, (match, content) => `<h2>${escapeHtml(content)}</h2>`);
-    text = text.replace(/^# (.*)$/gm, (match, content) => `<h1>${escapeHtml(content)}</h1>`);
+text = text.replace(/^# (.*)$/gm, (match, content) => `<h1>${escapeHtml(content)}</h1>`);
 
-    text = text.replace(/\*\*\*(.+?)\*\*\*/g, (match, content) => `<strong><em>${escapeHtml(content)}</em></strong>`);
+text = text.replace(/^> (.*)$/gm, (match, content) => `<blockquote>${escapeHtml(content)}</blockquote>`);
+
+text = text.replace(/\*\*\*(.+?)\*\*\*/g, (match, content) => `<strong><em>${escapeHtml(content)}</em></strong>`);
     text = text.replace(/___(.+?)___/g, (match, content) => `<strong><em>${escapeHtml(content)}</em></strong>`);
 
     text = text.replace(/\*\*(.+?)\*\*/g, (match, content) => `<strong>${escapeHtml(content)}</strong>`);
@@ -98,15 +100,23 @@ function parseMarkdown(text, embedLinks) {
     return text;
 }
 function parseMsg(msg, embedLinks) {
-    let text = msg.content;
+let text = msg.content;
 
-    text = escapeHtml(text);
-    text = parseMarkdown(text, embedLinks);
+text = text.replace(/^> (.*)$/gm, (match, content) => {
+const placeholder = `§BLOCKQUOTE_${Math.random().toString(36).substring(2, 11)}§`;
+return `${placeholder}${escapeHtml(content)}§/BLOCKQUOTE§`;
+});
+
+text = escapeHtml(text);
+text = parseMarkdown(text, embedLinks);
+
+text = text.replace(/§BLOCKQUOTE_[a-z0-9]+§/g, '<blockquote>');
+text = text.replace(/§\/BLOCKQUOTE§/g, '</blockquote>');
     
     text = DOMPurify.sanitize(text, {
-        ALLOWED_TAGS: [
-            'a','span','code','pre','strong','em','br','img'
-        ],
+ALLOWED_TAGS: [
+'a','span','code','pre','strong','em','br','img','blockquote'
+],
         ALLOWED_ATTR: [
             'href','target','rel','class',
             'data-user','data-channel','data-msg-id',
