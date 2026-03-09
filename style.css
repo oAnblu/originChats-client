@@ -2708,31 +2708,16 @@ a {
 }
 
 .message-reply {
+    vertical-align: middle;
     width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     display: flex;
-    align-items: center;
-    background: var(--surface-light);
-    padding: 6px 8px;
-    border-radius: 4px;
-    margin: 0 0 6px 0;
-    cursor: pointer;
-    transition: all 0.15s ease;
+    align-items: flex-start;
+    padding: 4px 17px;
     position: relative;
-    flex-shrink: 0;
     gap: 8px;
-}
-
-.message-reply::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--primary);
-    border-radius: 0 2px 2px 0;
+    flex-direction: row;
 }
 
 .message-reply:hover {
@@ -2744,10 +2729,11 @@ a {
 }
 
 .message-reply svg {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    /* height: 16px; */
     color: var(--text-dim, #a0a0a0);
     flex-shrink: 0;
+    /* transform: translateY(3px); */
 }
 
 .message-reply .avatar-small {
@@ -3611,13 +3597,14 @@ a {
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 6px;
+    margin-bottom: 6px;
 }
 
 .reaction {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 8px;
+    padding: 6px 8px;
     background: var(--surface-light);
     border: none;
     border-radius: 12px;
@@ -6216,19 +6203,6 @@ body {
         background: rgba(155, 135, 245, 0.3);
     }
 
-    .message-reply {
-        max-width: 100%;
-        padding: 2px 6px;
-        margin-bottom: 2px;
-        height: 24px;
-    }
-
-    .message-reply::before {
-        left: 8px;
-        top: 6px;
-        bottom: 6px;
-    }
-
     .message-reply .reply-text {
         font-size: 12px;
         color: var(--text-dim, #a0a0a0);
@@ -7418,10 +7392,6 @@ body {
     transition: border-color 0.15s ease;
 }
 
-#members-list .search-input:focus {
-    /* border: 1px var(--primary); */
-}
-
 #members-list .search-input::placeholder {
     color: var(--text-dim);
 }
@@ -7510,6 +7480,7 @@ body {
     text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
 }
 
