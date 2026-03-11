@@ -177,10 +177,11 @@ export function markChannelAsRead(channelName: string): void {
     unreadByChannel.value = newUnreads;
   }
 
-  if (unreadPings.value[channelName]) {
-    const pingCount = unreadPings.value[channelName];
+  const pingKey = `${sUrl}:${channelName}`;
+  if (unreadPings.value[pingKey]) {
+    const pingCount = unreadPings.value[pingKey];
     const newPings = { ...unreadPings.value };
-    delete newPings[channelName];
+    delete newPings[pingKey];
     unreadPings.value = newPings;
 
     const currentServerPings = serverPingsByServer.value[sUrl] || 0;
@@ -225,7 +226,7 @@ export function markServerAsRead(sUrl: string): void {
   });
 
   serverChannels.forEach((channel) => {
-    delete newPings[channel.name];
+    delete newPings[`${sUrl}:${channel.name}`];
   });
 
   unreadByChannel.value = newUnreads;
@@ -290,7 +291,7 @@ export function removeServer(sUrl: string): void {
 
   const newPings = { ...unreadPings.value };
   serverChannels.forEach((channel) => {
-    delete newPings[channel.name];
+    delete newPings[`${sUrl}:${channel.name}`];
   });
   unreadPings.value = newPings;
 

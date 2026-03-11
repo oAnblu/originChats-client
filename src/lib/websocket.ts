@@ -658,9 +658,9 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
 
       const notifLevel = getChannelNotifLevel(sUrl, msg.channel);
       const isMuted = notifLevel === "none";
+      const channelKey = `${sUrl}:${msg.channel}`;
 
       if (!isCurrentView && !isMuted) {
-        const channelKey = `${sUrl}:${msg.channel}`;
         unreadByChannel.value = {
           ...unreadByChannel.value,
           [channelKey]: (unreadByChannel.value[channelKey] || 0) + 1,
@@ -684,7 +684,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
           if (msg.message.user !== myUsername) {
             unreadPings.value = {
               ...unreadPings.value,
-              [msg.channel]: (unreadPings.value[msg.channel] || 0) + 1,
+              [channelKey]: (unreadPings.value[channelKey] || 0) + 1,
             };
             serverPingsByServer.value = {
               ...serverPingsByServer.value,
@@ -759,7 +759,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
             if (!isCurrentView) {
               unreadPings.value = {
                 ...unreadPings.value,
-                [msg.channel]: (unreadPings.value[msg.channel] || 0) + 1,
+                [channelKey]: (unreadPings.value[channelKey] || 0) + 1,
               };
               if (serverUrl.value === sUrl) renderChannelsSignal.value++;
             }
@@ -797,7 +797,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
             if (!isCurrentView) {
               unreadPings.value = {
                 ...unreadPings.value,
-                [msg.channel]: (unreadPings.value[msg.channel] || 0) + 1,
+                [channelKey]: (unreadPings.value[channelKey] || 0) + 1,
               };
               if (serverUrl.value === sUrl) renderChannelsSignal.value++;
             }
@@ -1066,8 +1066,9 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         if (getChannelNotifLevel(sUrl, channel) === "none") continue;
         // Only add if we don't already have a live ping count for this channel
         // (a live ping arrived via message_new and is already counted).
-        if (!mergedPings[channel]) {
-          mergedPings[channel] = count;
+        const pingKey = `${sUrl}:${channel}`;
+        if (!mergedPings[pingKey]) {
+          mergedPings[pingKey] = count;
           totalNew += count;
         }
       }

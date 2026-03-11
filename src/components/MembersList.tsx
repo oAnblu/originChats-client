@@ -46,12 +46,19 @@ export function MembersList() {
 
     if (memberList.length === 0) return null;
   } else {
-    memberList = Object.values(users.value).map((u) => ({
-      username: u.username,
-      status: u.status,
-      color: u.color || null,
-      roles: u.roles || [],
-    }));
+    const viewRoles = currentChannel.value?.permissions?.view;
+    memberList = Object.values(users.value)
+      .filter((u) => {
+        if (!viewRoles || viewRoles.length === 0) return true;
+        const userRoles = u.roles || [];
+        return viewRoles.some((r) => userRoles.includes(r));
+      })
+      .map((u) => ({
+        username: u.username,
+        status: u.status,
+        color: u.color || null,
+        roles: u.roles || [],
+      }));
   }
 
   // Build hoisted role list in server-defined order (only roles with hoisted: true)

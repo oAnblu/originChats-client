@@ -4171,6 +4171,10 @@ a {
   white-space: nowrap;
 }
 
+.member.offline {
+  opacity: 0.45;
+}
+
 .channels {
   display: flex;
   flex-direction: column;

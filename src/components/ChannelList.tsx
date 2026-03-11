@@ -252,7 +252,8 @@ export function ChannelList() {
             !isMuted &&
             (isChannelUnread(channel, serverUrl.value) ||
               unreadByChannel.value[`${serverUrl.value}:${channel.name}`] > 0);
-          const hasPing = unreadPings.value[channel.name] > 0;
+          const pingKey = `${serverUrl.value}:${channel.name}`;
+          const hasPing = unreadPings.value[pingKey] > 0;
 
           const voiceUsers: VoiceUser[] = (channel as any).voice_state || [];
 
@@ -337,7 +338,7 @@ export function ChannelList() {
               )}
               {hasPing && (
                 <span className="ping-badge">
-                  {unreadPings.value[channel.name]}
+                  {unreadPings.value[pingKey]}
                 </span>
               )}
               {hasUnread && !hasPing && (
