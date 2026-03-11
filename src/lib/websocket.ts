@@ -34,6 +34,7 @@ import {
   readTimesByServer,
   pendingDMAddUsername,
   setPendingDMAddUsername,
+  getChannelNotifLevel,
 } from "../state";
 
 const DM_SERVER_URL = "dms.mistium.com";
@@ -361,6 +362,7 @@ function scheduleReconnect(sUrl: string): void {
   if (attempt > RECONNECT_MAX_ATTEMPTS) {
     upsertBanner(reconnectBannerIds[sUrl] || `reconnect-${sUrl}`, {
       kind: "error",
+      serverUrl: sUrl,
       message: `Lost connection to ${serverLabel(sUrl)}. Click to reconnect manually.`,
       action: {
         label: "Reconnect",
@@ -386,6 +388,7 @@ function scheduleReconnect(sUrl: string): void {
 
   upsertBanner(bannerId, {
     kind: "warning",
+    serverUrl: sUrl,
     message: `Connection to ${label} lost. Reconnecting in ${Math.round(delay / 1000)}s… (attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS})`,
     action: {
       label: "Reconnect now",
@@ -472,6 +475,7 @@ export function connectToServer(sUrl: string, manual = false): void {
       const label = serverLabel(sUrl);
       showBanner({
         kind: "info",
+        serverUrl: sUrl,
         message: `Reconnected to ${label}.`,
         autoDismissMs: 4000,
       });
@@ -651,7 +655,11 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
 
       const isCurrentView =
         serverUrl.value === sUrl && msg.channel === currentChannel.value?.name;
-      if (!isCurrentView) {
+
+      const notifLevel = getChannelNotifLevel(sUrl, msg.channel);
+      const isMuted = notifLevel === "none";
+
+      if (!isCurrentView && !isMuted) {
         const channelKey = `${sUrl}:${msg.channel}`;
         unreadByChannel.value = {
           ...unreadByChannel.value,
@@ -668,6 +676,24 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
           dmMessageSound.value
         ) {
           playPingSound();
+        }
+
+        // "all" mode: treat every incoming message as a ping
+        if (notifLevel === "all") {
+          const myUsername = currentUserByServer.value[sUrl]?.username;
+          if (msg.message.user !== myUsername) {
+            unreadPings.value = {
+              ...unreadPings.value,
+              [msg.channel]: (unreadPings.value[msg.channel] || 0) + 1,
+            };
+            serverPingsByServer.value = {
+              ...serverPingsByServer.value,
+              [sUrl]: (serverPingsByServer.value[sUrl] || 0) + 1,
+            };
+            playPingSound();
+            if (serverUrl.value === sUrl) renderChannelsSignal.value++;
+            renderGuildSidebarSignal.value++;
+          }
         }
 
         // If this DM channel isn't in the sidebar list yet, add it so the
@@ -692,10 +718,36 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
 
         if (serverUrl.value === sUrl) renderChannelsSignal.value++;
         renderGuildSidebarSignal.value++;
+      } else if (!isCurrentView && isMuted) {
+        // Still update DM sidebar presence even when muted, but no badge.
+        if (sUrl === DM_SERVER_URL) {
+          const alreadyListed = dmServers.value.some(
+            (d: any) => d.channel === msg.channel,
+          );
+          if (!alreadyListed) {
+            const senderUsername = msg.message.user as string;
+            dmServers.value = [
+              ...dmServers.value,
+              {
+                channel: msg.channel,
+                name: senderUsername,
+                username: senderUsername,
+                last_message: msg.message.timestamp,
+              },
+            ];
+          }
+        }
       }
 
       const myUsername = currentUserByServer.value[sUrl]?.username;
-      if (myUsername && msg.message.user !== myUsername) {
+      // Only process mention/reply pings when not muted and not already in "all" mode
+      // ("all" already counted every message as a ping above).
+      if (
+        myUsername &&
+        msg.message.user !== myUsername &&
+        !isMuted &&
+        notifLevel !== "all"
+      ) {
         const content = (msg.message.content || "").toLowerCase();
         const matches = content.match(pingRegex);
         if (matches) {
@@ -1010,6 +1062,8 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       const mergedPings = { ...unreadPings.value };
       let totalNew = 0;
       for (const [channel, count] of Object.entries(newPingsByChannel)) {
+        // Skip muted channels.
+        if (getChannelNotifLevel(sUrl, channel) === "none") continue;
         // Only add if we don't already have a live ping count for this channel
         // (a live ping arrived via message_new and is already counted).
         if (!mergedPings[channel]) {
@@ -1186,6 +1240,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         setPendingDMAddUsername(null);
         showBanner({
           kind: "error",
+          serverUrl: sUrl,
           message: `"${attempted}" is not on OriginChats. Make sure you have the right username.`,
           autoDismissMs: 8000,
         });
@@ -1198,6 +1253,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       }
       showBanner({
         kind: "error",
+        serverUrl: sUrl,
         message: errText,
         autoDismissMs: 8000,
       });

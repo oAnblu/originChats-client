@@ -1,5 +1,6 @@
 import { useSignalEffect } from "@preact/signals";
 import { banners, dismissBanner, type Banner } from "../lib/ui-signals";
+import { serverUrl } from "../state";
 import { Icon } from "./Icon";
 
 function BannerItem({ banner }: { banner: Banner }) {
@@ -39,13 +40,18 @@ export function ErrorBannerStack() {
   // Subscribe to banner signal changes
   useSignalEffect(() => {
     banners.value;
+    serverUrl.value;
   });
 
-  if (banners.value.length === 0) return null;
+  const visibleBanners = banners.value.filter(
+    (b) => b.serverUrl === undefined || b.serverUrl === serverUrl.value,
+  );
+
+  if (visibleBanners.length === 0) return null;
 
   return (
     <div class="error-banner-stack">
-      {banners.value.map((b) => (
+      {visibleBanners.map((b) => (
         <BannerItem key={b.id} banner={b} />
       ))}
     </div>

@@ -1489,12 +1489,12 @@ body.font-serif {
 }
 
 .btn-primary {
-  background: var(--primary, #4e5058);
-  color: #fff;
+  background: var(--primary);
+  color: var(--text-on-primary, #fff);
 }
 
 .btn-primary:hover {
-  background: var(--primary-hover, #586068);
+  background: var(--primary-hover);
 }
 
 .btn-secondary {
@@ -1916,7 +1916,7 @@ body.font-serif {
 }
 
 .settings-field label {
-  color: var(--text-dim, #a0a0a0);
+  color: var(--text-dim);
   display: block;
   font-size: 12px;
   font-weight: 600;
@@ -1927,10 +1927,10 @@ body.font-serif {
 
 .settings-field input[type="text"],
 .settings-field input[type="color"] {
-  background: var(--surface-light, #141419);
-  border: 1px solid var(--border, #2a2a33);
+  background: var(--surface-light);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: var(--text, #ededed);
+  color: var(--text);
   font-size: 14px;
   padding: 8px 12px;
   width: 100%;
@@ -1939,11 +1939,11 @@ body.font-serif {
 .settings-field input[type="password"],
 .settings-field select,
 .settings-input {
-  background: var(--surface-light, #141419);
-  border: 1px solid var(--border, #2a2a33);
+  background: var(--surface-light);
+  border: 1px solid var(--border);
   border-radius: 6px;
   box-sizing: border-box;
-  color: var(--text, #ededed);
+  color: var(--text);
   font-size: 14px;
   padding: 8px 12px;
   width: 100%;
@@ -1952,12 +1952,12 @@ body.font-serif {
 .settings-field input[type="password"]:focus,
 .settings-field select:focus,
 .settings-input:focus {
-  border-color: var(--primary, #4e5058);
+  border-color: var(--primary);
   outline: none;
 }
 
 .settings-field input[type="text"]:focus {
-  border-color: var(--primary, #4e5058);
+  border-color: var(--primary);
   outline: none;
 }
 

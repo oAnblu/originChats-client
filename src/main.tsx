@@ -67,6 +67,7 @@ import { DMHomeTab } from "./components/DMHomeTab";
 import { NewMessageTab } from "./components/NewMessageTab";
 import { NotesTab } from "./components/NotesTab";
 import { VoiceCallView } from "./components/VoiceCallView";
+import { GlobalContextMenu } from "./components/ContextMenu";
 import { DiscoveryPage } from "./components/DiscoveryPage";
 
 function App() {
@@ -292,6 +293,7 @@ function App() {
       {showDiscoveryModal.value && <DiscoveryModal />}
       {showServerSettingsModal.value && <ServerSettingsModal />}
       <UserPopout />
+      <GlobalContextMenu />
     </div>
   );
 }

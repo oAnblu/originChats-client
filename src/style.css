@@ -79,6 +79,7 @@
   --z-modal: 10001;
   --z-popover: 10002;
   --z-tooltip: 10003;
+  --z-context-menu: 10010;
 
   --font-xs: 11px;
   --font-sm: 12px;
@@ -2439,7 +2440,7 @@ blockquote {
   display: block;
   margin-top: 8px;
   max-height: 400px;
-  max-width: calc(100% - 8px);
+  max-width: 100%;
   transition:
     transform 0.2s ease,
     box-shadow 0.2s ease,
@@ -3968,6 +3969,7 @@ a {
 .message-group-body {
   align-items: flex-start;
   display: flex;
+  min-height: 0;
   width: 100%;
 }
 
@@ -4007,6 +4009,7 @@ a {
   flex: 1;
   flex-direction: column;
   min-width: 0;
+  overflow: hidden;
   width: 100%;
 }
 
@@ -4156,7 +4159,7 @@ a {
 }
 
 .member .name {
-  color: #fff;
+  color: var(--text);
   font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4370,10 +4373,7 @@ a {
   min-width: 200px;
   padding: var(--space-1);
   position: fixed;
-  z-index: var(--z-popover);
-}
-
-@keyframes fadeScaleIn {
+  z-index: var(--z-context-menu);
   from {
     opacity: 0;
     transform: scale(0.95);
@@ -5034,8 +5034,8 @@ a {
   border: 1px solid var(--border);
   border-radius: 8px;
   display: block;
-  max-width: 520px;
-  overflow: visible;
+  max-width: min(520px, 100%);
+  overflow: hidden;
   width: 100%;
 }
 
@@ -7123,7 +7123,7 @@ pre {
 }
 
 .add-guild:hover .guild-icon {
-  background: rgba(59, 165, 92, 0.1);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
   border-color: var(--success);
 }
 
@@ -7235,7 +7235,7 @@ pre {
 }
 
 .discovery-overlay {
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--overlay-bg);
   bottom: 0;
   left: 0;
   position: absolute;
@@ -7270,8 +7270,8 @@ pre {
 }
 
 .discovery-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .discovery-header {
@@ -7281,7 +7281,7 @@ pre {
 
 .discovery-header h2 {
   align-items: center;
-  color: white;
+  color: var(--text);
   display: flex;
   font-size: 24px;
   gap: 12px;
@@ -7349,7 +7349,7 @@ pre {
 }
 
 .discovery-error-text {
-  color: #f04747;
+  color: var(--danger);
   font-size: 13px;
   margin-top: 6px;
 }
@@ -7452,7 +7452,7 @@ pre {
 }
 
 .discovery-info h3 {
-  color: white;
+  color: var(--text);
   font-size: 16px;
   margin: 0 0 8px;
 }
@@ -7585,7 +7585,7 @@ pre {
 }
 
 .discovery-page-title svg {
-  color: var(--accent, #5865f2);
+  color: var(--accent);
   flex-shrink: 0;
 }
 
@@ -7612,9 +7612,8 @@ pre {
 }
 
 .discovery-page-search-wrap:focus-within {
-  border-color: var(--accent, #5865f2);
-  box-shadow: 0 0 0 3px
-    color-mix(in srgb, var(--accent, #5865f2) 15%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .discovery-page-search-wrap > svg {
@@ -7689,9 +7688,9 @@ pre {
 }
 
 .discovery-tag-pill.active {
-  background: var(--accent, #5865f2);
-  border-color: var(--accent, #5865f2);
-  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent, #fff);
 }
 
 .discovery-tag-pill.small {
@@ -7726,8 +7725,8 @@ pre {
 }
 
 .discovery-page-card:hover {
-  border-color: var(--accent, #5865f2);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
 .discovery-page-card-top {
@@ -7843,7 +7842,7 @@ pre {
   width: 40px;
   height: 40px;
   border: 3px solid var(--surface-light);
-  border-top-color: var(--accent, #5865f2);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -7884,7 +7883,7 @@ pre {
 }
 
 .discovery-conditions-section h2 svg {
-  color: var(--accent, #5865f2);
+  color: var(--accent);
   flex-shrink: 0;
 }
 
@@ -8901,7 +8900,7 @@ body,
 
   /* Mobile Members List Improvements */
   #members-list {
-    background: var(--surface, #0a0a0c);
+    background: var(--surface);
     max-width: 100%;
     padding: 0;
     width: 100%;

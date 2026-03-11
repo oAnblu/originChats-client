@@ -3,7 +3,7 @@ import { useSignalEffect } from "@preact/signals";
 import { currentChannel, currentUser } from "../state";
 import { notesChannel } from "../lib/notes-channel";
 import { Icon } from "./Icon";
-import { ContextMenu } from "./ContextMenu";
+import { showContextMenu } from "../lib/ui-signals";
 import { MessageContent } from "./MessageContent";
 import { avatarUrl } from "../utils";
 import { useScrollLock } from "./useScrollLock";
@@ -72,11 +72,6 @@ function resetInputHeight() {
 export function NotesTab() {
   const [notes, setNotes] = useState<NoteMessage[]>([]);
   const [editingNote, setEditingNote] = useState<NoteMessage | null>(null);
-  const [contextMenu, setContextMenu] = useState<{
-    items: any[];
-    x: number;
-    y: number;
-  } | null>(null);
 
   const lastChannelRef = useRef<string | null>(null);
 
@@ -193,7 +188,7 @@ export function NotesTab() {
       fn: () => deleteNote(note.key),
     });
 
-    setContextMenu({ items, x: e.clientX, y: e.clientY });
+    showContextMenu(e, items);
   };
 
   const groups = groupNotes(notes);
@@ -321,14 +316,6 @@ export function NotesTab() {
           </div>
         </div>
       </div>
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          items={contextMenu.items}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
     </div>
   );
 }

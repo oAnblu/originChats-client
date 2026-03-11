@@ -39,15 +39,6 @@ export function DMFriendsTab() {
     blockedUsers.value;
   });
 
-  // Load groups whenever the groups tab is opened
-  useEffect(() => {
-    if (currentDMTab.value === "groups") {
-      getMyGroups()
-        .then((g) => (roturMyGroups.value = g))
-        .catch(() => {});
-    }
-  }, [currentDMTab.value]);
-
   const tab = currentDMTab.value;
 
   return (
@@ -379,9 +370,13 @@ function GroupsList() {
     try {
       await joinGroup(tag);
       setActionMsg(`Joined ${tag}!`);
-      // Refresh my groups
-      const g = await getMyGroups();
-      roturMyGroups.value = g;
+      const joined = searchResults.find((g) => g.tag === tag);
+      if (joined) {
+        roturMyGroups.value = [
+          ...roturMyGroups.value,
+          { ...joined, is_member: true },
+        ];
+      }
       setSearchResults((prev) =>
         prev.map((g) => (g.tag === tag ? { ...g, is_member: true } : g)),
       );
@@ -397,8 +392,7 @@ function GroupsList() {
     try {
       await leaveGroup(tag);
       setActionMsg(`Left ${tag}.`);
-      const g = await getMyGroups();
-      roturMyGroups.value = g;
+      roturMyGroups.value = roturMyGroups.value.filter((g) => g.tag !== tag);
     } catch (e: any) {
       setActionMsg(e.message || "Failed to leave");
     } finally {

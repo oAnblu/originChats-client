@@ -2,6 +2,8 @@ import { useEffect, useRef } from "preact/hooks";
 import { userPopout, showAccountModal } from "../lib/ui-signals";
 import { UserProfileCard } from "./UserProfile";
 
+const isMobile = () => window.innerWidth <= 768;
+
 export function UserPopout() {
   const popoutRef = useRef<HTMLDivElement>(null);
   const data = userPopout.value;
@@ -132,6 +134,12 @@ export function openUserPopout(
   anchorRight?: boolean,
 ) {
   e.stopPropagation();
+
+  if (isMobile()) {
+    showAccountModal.value = username;
+    return;
+  }
+
   const target = e.currentTarget as HTMLElement;
   if (!target) return;
 

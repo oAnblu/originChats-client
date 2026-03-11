@@ -12,6 +12,9 @@ import {
   serverPingsByServer,
   unreadByChannel,
   DM_SERVER_URL,
+  serverNotifSettings,
+  getChannelNotifLevel,
+  type NotificationLevel,
 } from "../state";
 import { wsSend } from "../lib/websocket";
 import {
@@ -20,21 +23,19 @@ import {
   removeServer,
   openDMWith,
 } from "../lib/actions";
-import { showDiscoveryModal, mobileSidebarOpen } from "../lib/ui-signals";
+import {
+  showDiscoveryModal,
+  mobileSidebarOpen,
+  showContextMenu,
+} from "../lib/ui-signals";
 import { renderGuildSidebarSignal } from "../lib/ui-signals";
 import { Icon, ServerIcon } from "./Icon";
-import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { avatarUrl, reloadServerIcon } from "../utils";
 
 export function GuildSidebar() {
   useSignalEffect(() => {
     renderGuildSidebarSignal.value;
   });
-  const [contextMenu, setContextMenu] = useState<{
-    items: ContextMenuItem[];
-    x: number;
-    y: number;
-  } | null>(null);
 
   const dragIndexRef = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -100,43 +101,78 @@ export function GuildSidebar() {
     server: { url: string; name: string },
   ) => {
     e.preventDefault();
-    setContextMenu({
-      items: [
-        {
-          label: "Mark as Read",
-          icon: "CheckCircle",
-          fn: () => markServerAsRead(server.url),
-        },
-        { separator: true, label: "", fn: () => {} },
-        {
-          label: "Reload Icon",
-          icon: "RefreshCw",
-          fn: () => reloadServerIcon(server.url),
-        },
-        { separator: true, label: "", fn: () => {} },
-        {
-          label: "Copy URL",
-          icon: "Copy",
-          fn: () => {
-            navigator.clipboard.writeText(server.url);
+    const currentLevel: NotificationLevel =
+      serverNotifSettings.value[server.url] ?? "mentions";
+
+    const setServerNotif = (level: NotificationLevel) => {
+      if (level === "mentions") {
+        const next = { ...serverNotifSettings.value };
+        delete next[server.url];
+        serverNotifSettings.value = next;
+      } else {
+        serverNotifSettings.value = {
+          ...serverNotifSettings.value,
+          [server.url]: level,
+        };
+      }
+    };
+
+    showContextMenu(e, [
+      {
+        label: "Mark as Read",
+        icon: "CheckCircle",
+        fn: () => markServerAsRead(server.url),
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Notifications",
+        icon: "Bell",
+        fn: () => {},
+        children: [
+          {
+            label: `All Messages${currentLevel === "all" ? " ✓" : ""}`,
+            icon: "Bell",
+            fn: () => setServerNotif("all"),
           },
-        },
-        { separator: true, label: "", fn: () => {} },
-        {
-          label: "Leave Server",
-          icon: "LogOut",
-          danger: true,
-          fn: () => {
-            wsSend({ cmd: "user_leave" }, server.url);
-            if (confirm("Leave this server?")) {
-              removeServer(server.url);
-            }
+          {
+            label: `Mentions Only${currentLevel === "mentions" ? " ✓" : ""}`,
+            icon: "BellDot",
+            fn: () => setServerNotif("mentions"),
           },
+          {
+            label: `Mute Server${currentLevel === "none" ? " ✓" : ""}`,
+            icon: "BellOff",
+            fn: () => setServerNotif("none"),
+          },
+        ],
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Reload Icon",
+        icon: "RefreshCw",
+        fn: () => reloadServerIcon(server.url),
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Copy URL",
+        icon: "Copy",
+        fn: () => {
+          navigator.clipboard.writeText(server.url);
         },
-      ],
-      x: e.clientX,
-      y: e.clientY,
-    });
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Leave Server",
+        icon: "LogOut",
+        danger: true,
+        fn: () => {
+          wsSend({ cmd: "user_leave" }, server.url);
+          if (confirm("Leave this server?")) {
+            removeServer(server.url);
+          }
+        },
+      },
+    ]);
   };
 
   const handleDMContextMenu = (
@@ -144,25 +180,21 @@ export function GuildSidebar() {
     dmServer: { channel: string; username: string; name: string },
   ) => {
     e.preventDefault();
-    setContextMenu({
-      items: [
-        {
-          label: "Mark as Read",
-          icon: "CheckCircle",
-          fn: () => markServerAsRead(DM_SERVER_URL),
+    showContextMenu(e, [
+      {
+        label: "Mark as Read",
+        icon: "CheckCircle",
+        fn: () => markServerAsRead(DM_SERVER_URL),
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Copy Username",
+        icon: "Copy",
+        fn: () => {
+          navigator.clipboard.writeText(dmServer.username);
         },
-        { separator: true, label: "", fn: () => {} },
-        {
-          label: "Copy Username",
-          icon: "Copy",
-          fn: () => {
-            navigator.clipboard.writeText(dmServer.username);
-          },
-        },
-      ],
-      x: e.clientX,
-      y: e.clientY,
-    });
+      },
+    ]);
   };
 
   return (
@@ -213,8 +245,12 @@ export function GuildSidebar() {
           })}
         <div className="guild-divider"></div>
         {servers.value.map((server, index) => {
-          const hasUnread = (unreadCountsByServer.value[server.url] || 0) > 0;
-          const pingCount = serverPingsByServer.value[server.url] || 0;
+          const serverMuted = serverNotifSettings.value[server.url] === "none";
+          const hasUnread =
+            !serverMuted && (unreadCountsByServer.value[server.url] || 0) > 0;
+          const pingCount = serverMuted
+            ? 0
+            : serverPingsByServer.value[server.url] || 0;
           const isDragOver = dragOverIndex === index;
           return (
             <div
@@ -254,15 +290,6 @@ export function GuildSidebar() {
           </div>
         </div>
       </div>
-
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          items={contextMenu.items}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
     </div>
   );
 }

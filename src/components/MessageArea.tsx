@@ -38,6 +38,7 @@ import {
   searchLoading,
   mobilePanelOpen,
   closeMobileNav,
+  showContextMenu,
 } from "../lib/ui-signals";
 import { wsSend } from "../lib/websocket";
 import {
@@ -49,7 +50,6 @@ import { selectChannel } from "../lib/actions";
 import { getShortcodeMap, loadShortcodes } from "../lib/shortcodes";
 import { Icon } from "./Icon";
 import { MembersList } from "./MembersList";
-import { ContextMenu } from "./ContextMenu";
 import { UserContextMenu, useUserContextMenu } from "./UserContextMenu";
 import { ConfirmDialog } from "./Modal";
 import { ImageViewer } from "./ImageViewer";
@@ -581,11 +581,6 @@ export function MessageArea() {
     },
   });
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-  const [contextMenu, setContextMenu] = useState<{
-    items: any[];
-    x: number;
-    y: number;
-  } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
@@ -1207,11 +1202,7 @@ export function MessageArea() {
         }),
     });
 
-    setContextMenu({
-      items: menuItems,
-      x: e.clientX,
-      y: e.clientY,
-    });
+    showContextMenu(e, menuItems);
   };
 
   const handleReaction = (msg: Message, emoji: string) => {
@@ -1292,11 +1283,12 @@ export function MessageArea() {
       const isHead = idx === 0;
 
       const interaction = msg.interaction;
-      const groupClass = isHead
-        ? replyTo || interaction
-          ? "message-group has-reply"
-          : "message-group"
-        : "message-single";
+      const groupClass =
+        isHead || interaction
+          ? replyTo || interaction
+            ? "message-group has-reply"
+            : "message-group"
+          : "message-single";
 
       return (
         <div
@@ -1363,7 +1355,7 @@ export function MessageArea() {
               </div>
             </div>
           )}
-          {isHead && (
+          {(isHead || interaction) && (
             <>
               {replyTo || interaction ? (
                 <div className="message-group-body">
@@ -1434,7 +1426,7 @@ export function MessageArea() {
               )}
             </>
           )}
-          {!isHead && (
+          {!isHead && !interaction && (
             <div className="message-group-content">
               <MessageContent
                 content={msg.content}
@@ -1920,14 +1912,6 @@ export function MessageArea() {
         </div>
         <RightPanel />
       </div>
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          items={contextMenu.items}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
       {userMenu && (
         <UserContextMenu
           username={userMenu.username}

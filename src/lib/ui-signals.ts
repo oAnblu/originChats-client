@@ -1,5 +1,6 @@
 import { signal } from "@preact/signals";
 import type { Message } from "../types";
+import type { ContextMenuItem } from "../components/ContextMenu";
 
 export type BannerKind = "error" | "warning" | "info";
 
@@ -7,6 +8,8 @@ export interface Banner {
   id: string;
   kind: BannerKind;
   message: string;
+  /** If set, the banner is only shown when the user is viewing this server URL. Omit for global banners. */
+  serverUrl?: string;
   /** If set, the banner shows a button that triggers this callback */
   action?: { label: string; fn: () => void };
   /** Auto-dismiss after this many ms. Omit for persistent banners. */
@@ -84,4 +87,22 @@ export const mobilePanelOpen = signal(false);
 export function closeMobileNav() {
   mobileSidebarOpen.value = false;
   mobilePanelOpen.value = false;
+}
+
+/** Global context menu — set this to show a menu, null to close. */
+export interface GlobalContextMenuState {
+  x: number;
+  y: number;
+  items: ContextMenuItem[];
+}
+export const globalContextMenu = signal<GlobalContextMenuState | null>(null);
+
+export function showContextMenu(e: MouseEvent, items: ContextMenuItem[]) {
+  e.preventDefault();
+  e.stopPropagation();
+  globalContextMenu.value = { x: e.clientX, y: e.clientY, items };
+}
+
+export function closeContextMenu() {
+  globalContextMenu.value = null;
 }

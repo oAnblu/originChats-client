@@ -220,6 +220,38 @@ export const sendTypingIndicators = signal<boolean>(true);
 
 export const dmMessageSound = signal<boolean>(true);
 
+// ─── Notification settings ─────────────────────────────────────────────────────
+// Per-server and per-channel notification level overrides.
+// "all"      — ping (sound + badge) for every message
+// "mentions" — default; only @mentions and reply pings
+// "none"     — muted; no pings, no sound, messages still shown
+export type NotificationLevel = "all" | "mentions" | "none";
+
+/** Overrides keyed by serverUrl. */
+export const serverNotifSettings = signal<Record<string, NotificationLevel>>(
+  {},
+);
+
+/** Overrides keyed by "serverUrl:channelName". Channel settings take priority over server settings. */
+export const channelNotifSettings = signal<Record<string, NotificationLevel>>(
+  {},
+);
+
+/** Resolve the effective notification level for a channel, applying server → channel override order. */
+export function getChannelNotifLevel(
+  sUrl: string,
+  channelName: string,
+): NotificationLevel {
+  const channelKey = `${sUrl}:${channelName}`;
+  if (channelNotifSettings.value[channelKey] !== undefined) {
+    return channelNotifSettings.value[channelKey];
+  }
+  if (serverNotifSettings.value[sUrl] !== undefined) {
+    return serverNotifSettings.value[sUrl];
+  }
+  return "mentions";
+}
+
 // --- Client Appearance / Notification Settings ---
 
 export type PingSoundType =
@@ -556,6 +588,14 @@ export async function initSettingsFromDb(): Promise<void> {
   micThreshold.value = num(await s.get<string>("micThreshold", undefined), 30);
   voiceVideoRes.value = num(await s.get<string>("vcRes", undefined), 720);
   voiceVideoFps.value = num(await s.get<string>("vcFps", undefined), 30);
+  serverNotifSettings.value = await s.get<Record<string, NotificationLevel>>(
+    "serverNotifSettings",
+    {},
+  );
+  channelNotifSettings.value = await s.get<Record<string, NotificationLevel>>(
+    "channelNotifSettings",
+    {},
+  );
 
   _settingsLoaded = true;
 }
@@ -694,4 +734,12 @@ effect(() => {
 effect(() => {
   const v = voiceVideoFps.value;
   if (_settingsLoaded) dbSettings.set("vcFps", String(v));
+});
+effect(() => {
+  if (_settingsLoaded)
+    dbSettings.set("serverNotifSettings", serverNotifSettings.value);
+});
+effect(() => {
+  if (_settingsLoaded)
+    dbSettings.set("channelNotifSettings", channelNotifSettings.value);
 });

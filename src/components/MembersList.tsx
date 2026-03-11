@@ -40,7 +40,7 @@ export function MembersList() {
     memberList = uniqueUsernames.map((username) => ({
       username,
       status: users.value[username?.toLowerCase()]?.status,
-      color: users.value[username?.toLowerCase()]?.color || "#fff",
+      color: users.value[username?.toLowerCase()]?.color || null,
       roles: users.value[username?.toLowerCase()]?.roles || [],
     }));
 
@@ -49,7 +49,7 @@ export function MembersList() {
     memberList = Object.values(users.value).map((u) => ({
       username: u.username,
       status: u.status,
-      color: u.color || "#fff",
+      color: u.color || null,
       roles: u.roles || [],
     }));
   }
@@ -154,8 +154,6 @@ function MemberItem({
   offline?: boolean;
   onContextMenu: (e: MouseEvent, username: string) => void;
 }) {
-  const nameColor = user.color || "#fff";
-
   return (
     <div
       className={`member${offline ? " offline" : ""}`}
@@ -163,7 +161,10 @@ function MemberItem({
       onContextMenu={(e: any) => onContextMenu(e, user.username)}
     >
       <img src={avatarUrl(user.username)} alt={user.username} />
-      <span className="name" style={{ color: nameColor }}>
+      <span
+        className="name"
+        style={user.color ? { color: user.color } : undefined}
+      >
         {user.username}
       </span>
     </div>

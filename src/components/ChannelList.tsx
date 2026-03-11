@@ -12,6 +12,9 @@ import {
   currentUserByServer,
   DM_SERVER_URL,
   roturStatuses,
+  channelNotifSettings,
+  getChannelNotifLevel,
+  type NotificationLevel,
 } from "../state";
 import {
   selectChannel,
@@ -27,9 +30,9 @@ import {
   showVoiceCallView,
   mobileSidebarOpen,
   closeMobileNav,
+  showContextMenu,
 } from "../lib/ui-signals";
 import { Icon } from "./Icon";
-import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { voiceManager } from "../voice";
 import { openUserPopout } from "./UserPopout";
 import type { VoiceUser } from "../types";
@@ -55,12 +58,6 @@ export function ChannelList() {
     renderVoiceSignal.value; // subscribe to voice state changes
     forceUpdate(undefined);
   });
-  const [contextMenu, setContextMenu] = useState<{
-    items: ContextMenuItem[];
-    x: number;
-    y: number;
-  } | null>(null);
-
   const isDM = serverUrl.value === DM_SERVER_URL;
   const rawChs = channels.value;
   const chs = isDM
@@ -86,25 +83,62 @@ export function ChannelList() {
 
   const handleChannelContextMenu = (e: MouseEvent, channel: any) => {
     e.preventDefault();
-    setContextMenu({
-      items: [
-        {
-          label: "Mark as Read",
-          icon: "CheckCircle",
-          fn: () => markChannelAsRead(channel.name),
-        },
-        { separator: true, label: "", fn: () => {} },
-        {
-          label: "Copy Channel Name",
-          icon: "Copy",
-          fn: () => {
-            navigator.clipboard.writeText(channel.name);
+    const sUrl = serverUrl.value;
+    const channelKey = `${sUrl}:${channel.name}`;
+    const currentLevel = getChannelNotifLevel(sUrl, channel.name);
+
+    const setChannelNotif = (level: NotificationLevel) => {
+      if (level === "mentions") {
+        // "mentions" is the default — remove any override so server/global default applies
+        const next = { ...channelNotifSettings.value };
+        delete next[channelKey];
+        channelNotifSettings.value = next;
+      } else {
+        channelNotifSettings.value = {
+          ...channelNotifSettings.value,
+          [channelKey]: level,
+        };
+      }
+    };
+
+    showContextMenu(e, [
+      {
+        label: "Mark as Read",
+        icon: "CheckCircle",
+        fn: () => markChannelAsRead(channel.name),
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Notifications",
+        icon: "Bell",
+        fn: () => {},
+        children: [
+          {
+            label: `All Messages${currentLevel === "all" ? " ✓" : ""}`,
+            icon: "Bell",
+            fn: () => setChannelNotif("all"),
           },
+          {
+            label: `Mentions Only${currentLevel === "mentions" ? " ✓" : ""}`,
+            icon: "BellDot",
+            fn: () => setChannelNotif("mentions"),
+          },
+          {
+            label: `Mute${currentLevel === "none" ? " ✓" : ""}`,
+            icon: "BellOff",
+            fn: () => setChannelNotif("none"),
+          },
+        ],
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Copy Channel Name",
+        icon: "Copy",
+        fn: () => {
+          navigator.clipboard.writeText(channel.name);
         },
-      ],
-      x: e.clientX,
-      y: e.clientY,
-    });
+      },
+    ]);
   };
 
   return (
@@ -198,9 +232,15 @@ export function ChannelList() {
 
           const isVoice = channel.type === "voice";
           const displayName = (channel as any).display_name || channel.name;
+          const notifLevel = getChannelNotifLevel(
+            serverUrl.value,
+            channel.name,
+          );
+          const isMuted = notifLevel === "none";
           const hasUnread =
-            isChannelUnread(channel, serverUrl.value) ||
-            unreadByChannel.value[`${serverUrl.value}:${channel.name}`] > 0;
+            !isMuted &&
+            (isChannelUnread(channel, serverUrl.value) ||
+              unreadByChannel.value[`${serverUrl.value}:${channel.name}`] > 0);
           const hasPing = unreadPings.value[channel.name] > 0;
 
           const voiceUsers: VoiceUser[] = (channel as any).voice_state || [];
@@ -258,7 +298,7 @@ export function ChannelList() {
           return (
             <div
               key={channel.name}
-              className={`channel-item ${currentChannel.value?.name === channel.name ? "active" : ""} ${hasUnread ? "has-unread" : ""}`}
+              className={`channel-item ${currentChannel.value?.name === channel.name ? "active" : ""} ${hasUnread ? "has-unread" : ""} ${isMuted ? "muted" : ""}`}
               onClick={() => handleChannelClick(channel)}
               onContextMenu={(e: any) => handleChannelContextMenu(e, channel)}
             >
@@ -277,6 +317,13 @@ export function ChannelList() {
                 </>
               )}
               <span>{displayName}</span>
+              {isMuted && !hasPing && (
+                <span
+                  style={{ marginLeft: "auto", opacity: 0.4, display: "flex" }}
+                >
+                  <Icon name="BellOff" size={14} />
+                </span>
+              )}
               {hasPing && (
                 <span className="ping-badge">
                   {unreadPings.value[channel.name]}
@@ -340,15 +387,6 @@ export function ChannelList() {
       )}
 
       <UserPanel />
-
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          items={contextMenu.items}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
     </div>
   );
 }
@@ -356,58 +394,29 @@ export function ChannelList() {
 // ── User panel ────────────────────────────────────────────────────────────────
 
 function UserPanel() {
-  const [showStatusModal, setShowStatusModal] = useState(false);
   const sUrl = serverUrl.value;
   const username = currentUserByServer.value[sUrl]?.username;
-  const myStatus = username
-    ? (roturStatuses.value[username.toLowerCase()] ?? null)
-    : null;
 
   if (!username) return null;
 
   return (
-    <>
-      <div className="channel-user-panel">
-        <div
-          className="channel-user-panel-identity"
-          onClick={() => (showSettingsModal.value = true)}
-          title="Open Settings"
-        >
-          <div className="channel-user-panel-avatar">
-            <img src={avatarUrl(username)} alt={username} />
-          </div>
-          <div className="channel-user-panel-info">
-            <div className="channel-user-panel-name">{username}</div>
-            {myStatus?.content ? (
-              <div className="channel-user-panel-status">
-                <span className="channel-user-panel-status-text">
-                  {myStatus.content}
-                </span>
-              </div>
-            ) : (
-              <div className="channel-user-panel-status muted">
-                Set a status…
-              </div>
-            )}
-          </div>
+    <div className="channel-user-panel">
+      <div className="channel-user-panel-identity">
+        <div className="channel-user-panel-avatar">
+          <img src={avatarUrl(username)} alt={username} />
         </div>
-        <button
-          className="channel-user-panel-btn"
-          title="Edit Status"
-          onClick={() => setShowStatusModal(true)}
-        >
-          <Icon name="Smile" size={16} />
-        </button>
+        <div className="channel-user-panel-info">
+          <div className="channel-user-panel-name">{username}</div>
+        </div>
       </div>
-
-      {showStatusModal && (
-        <StatusModal
-          username={username}
-          current={myStatus}
-          onClose={() => setShowStatusModal(false)}
-        />
-      )}
-    </>
+      <button
+        className="channel-user-panel-btn"
+        title="Open Settings"
+        onClick={() => (showSettingsModal.value = true)}
+      >
+        <Icon name="Settings" size={16} />
+      </button>
+    </div>
   );
 }
 

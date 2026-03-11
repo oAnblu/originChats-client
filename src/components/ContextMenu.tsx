@@ -1,6 +1,7 @@
 import { h } from "preact";
 import { useState, useEffect, useRef } from "preact/hooks";
 import { Icon } from "./Icon";
+import { globalContextMenu, closeContextMenu } from "../lib/ui-signals";
 
 export interface ContextMenuItem {
   label: string;
@@ -8,6 +9,8 @@ export interface ContextMenuItem {
   danger?: boolean;
   separator?: boolean;
   fn: (event?: Event) => void;
+  /** If set, hovering this item opens a nested submenu instead of calling fn. */
+  children?: ContextMenuItem[];
 }
 
 export interface ContextMenuProps {
@@ -17,68 +20,103 @@ export interface ContextMenuProps {
   onClose: () => void;
 }
 
-export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+const PAD = 6;
+
+// ── Submenu panel (no backdrop-filter, positioned as sibling via callback) ────
+
+interface SubMenuPanelProps {
+  items: ContextMenuItem[];
+  anchorEl: HTMLDivElement;
+  onClose: () => void;
+  preferLeft: boolean;
+  /** Called with the resolved preferLeft so nested submenus can inherit it. */
+  onOpenChild: (
+    idx: number | null,
+    anchorEl: HTMLDivElement | null,
+    preferLeft: boolean,
+  ) => void;
+  openChildIdx: number | null;
+}
+
+function SubMenuPanel({
+  items,
+  anchorEl,
+  onClose,
+  preferLeft,
+  onOpenChild,
+  openChildIdx,
+}: SubMenuPanelProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const itemEls = useRef<(HTMLDivElement | null)[]>([]);
+  const resolvedPreferLeft = useRef(preferLeft);
 
   useEffect(() => {
-    if (menuRef.current) {
-      let finalX = x;
-      let finalY = y;
-      const rect = menuRef.current.getBoundingClientRect();
-      const padding = 6;
-      const isMobile = window.innerWidth <= 768 || "ontouchstart" in window;
+    const menu = menuRef.current;
+    if (!menu) return;
+    const anchor = anchorEl.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
 
-      if (!isMobile) {
-        if (x + rect.width > window.innerWidth - padding) {
-          finalX = window.innerWidth - rect.width - padding;
-        }
-
-        if (y + rect.height > window.innerHeight - padding) {
-          finalY = window.innerHeight - rect.height - padding;
-        }
-      }
-
-      menuRef.current.style.left = `${finalX}px`;
-      menuRef.current.style.top = `${finalY}px`;
+    let left: number;
+    if (!preferLeft && anchor.right + menu.offsetWidth + PAD <= vw) {
+      left = anchor.right;
+      resolvedPreferLeft.current = false;
+    } else {
+      left = anchor.left - menu.offsetWidth;
+      resolvedPreferLeft.current = true;
     }
-  }, [x, y]);
+    left = Math.max(PAD, Math.min(left, vw - menu.offsetWidth - PAD));
+    const top = Math.max(
+      PAD,
+      Math.min(anchor.top, vh - menu.offsetHeight - PAD),
+    );
 
-  const handleClickOutside = (e: MouseEvent) => {
-    if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-      onClose();
-    }
-  };
-
-  useEffect(() => {
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    menu.style.visibility = "visible";
   }, []);
 
   return (
     <div
       ref={menuRef}
-      className="context-menu"
-      style={{ position: "fixed", display: "block" }}
+      className="context-menu context-menu--sub"
+      style="position:fixed;display:block;visibility:hidden"
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((item, idx) => {
-        if (item.separator) {
+        if (item.separator)
           return <div key={idx} className="context-menu-separator" />;
-        }
-
+        const hasChildren = !!item.children?.length;
         return (
           <div
             key={idx}
-            className={`context-menu-item${item.danger ? " danger" : ""}`}
+            ref={(el) => {
+              itemEls.current[idx] = el;
+            }}
+            className={`context-menu-item${item.danger ? " danger" : ""}${hasChildren ? " has-submenu" : ""}`}
+            onMouseEnter={() =>
+              onOpenChild(
+                hasChildren ? idx : null,
+                hasChildren ? itemEls.current[idx] : null,
+                resolvedPreferLeft.current,
+              )
+            }
             onClick={(e) => {
-              e.stopPropagation();
-              item.fn(e);
-              onClose();
+              if (!hasChildren) {
+                e.stopPropagation();
+                item.fn(e);
+                onClose();
+              }
             }}
           >
-            {item.icon && <Icon name={item.icon} size={16} />}
+            {item.icon && <Icon name={item.icon as any} size={16} />}
             <span>{item.label}</span>
+            {hasChildren && (
+              <span className="context-menu-arrow">
+                <Icon name="ChevronRight" size={14} />
+              </span>
+            )}
           </div>
         );
       })}
@@ -86,35 +124,163 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
   );
 }
 
-export interface UseContextMenuResult {
-  showContextMenu: (event: MouseEvent, items: ContextMenuItem[]) => void;
-  closeContextMenu: () => void;
-  contextMenu: ContextMenuItem[] | null;
-  position: { x: number; y: number } | null;
+// ── Root ContextMenu ──────────────────────────────────────────────────────────
+// Renders the root menu + all open submenu levels as *siblings* in a zero-size
+// wrapper, so no submenu is ever a DOM descendant of a backdrop-filter element.
+
+export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const itemEls = useRef<(HTMLDivElement | null)[]>([]);
+  const preferLeftRef = useRef(false);
+
+  // Each level of open submenu: { items, anchorEl, preferLeft }
+  const [submenuStack, setSubmenuStack] = useState<
+    Array<{
+      items: ContextMenuItem[];
+      anchorEl: HTMLDivElement;
+      preferLeft: boolean;
+    }>
+  >([]);
+
+  const openSubmenuAt = (
+    depth: number,
+    idx: number | null,
+    anchorEl: HTMLDivElement | null,
+    preferLeft: boolean,
+  ) => {
+    if (idx === null || !anchorEl) {
+      // Close this depth and everything below it
+      setSubmenuStack((s) => s.slice(0, depth));
+      return;
+    }
+    const parentItems = depth === 0 ? items : submenuStack[depth - 1]?.items;
+    if (!parentItems) return;
+    const children = parentItems[idx]?.children;
+    if (!children?.length) return;
+    setSubmenuStack((s) => [
+      ...s.slice(0, depth),
+      { items: children, anchorEl, preferLeft },
+    ]);
+  };
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const isMobile = vw <= 768 || "ontouchstart" in window;
+
+    let finalX = x;
+    let finalY = y;
+    if (!isMobile) {
+      if (finalX + menu.offsetWidth > vw - PAD) {
+        finalX = vw - menu.offsetWidth - PAD;
+        preferLeftRef.current = true;
+      } else {
+        preferLeftRef.current = false;
+      }
+      if (finalY + menu.offsetHeight > vh - PAD)
+        finalY = vh - menu.offsetHeight - PAD;
+      finalX = Math.max(PAD, finalX);
+      finalY = Math.max(PAD, finalY);
+    }
+    menu.style.left = `${finalX}px`;
+    menu.style.top = `${finalY}px`;
+    menu.style.visibility = "visible";
+  }, [x, y]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    // Zero-size wrapper — position:fixed creates a stacking context; give it an explicit
+    // z-index so it wins over message row stacking contexts (which use z-index: var(--z-base)).
+    <div style="position:fixed;top:0;left:0;width:0;height:0;overflow:visible;z-index:var(--z-context-menu)">
+      {/* Root menu */}
+      <div
+        ref={menuRef}
+        className="context-menu"
+        style="position:fixed;display:block;visibility:hidden"
+        onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        {items.map((item, idx) => {
+          if (item.separator)
+            return <div key={idx} className="context-menu-separator" />;
+          const hasChildren = !!item.children?.length;
+          return (
+            <div
+              key={idx}
+              ref={(el) => {
+                itemEls.current[idx] = el;
+              }}
+              className={`context-menu-item${item.danger ? " danger" : ""}${hasChildren ? " has-submenu" : ""}`}
+              onMouseEnter={() =>
+                openSubmenuAt(
+                  0,
+                  hasChildren ? idx : null,
+                  hasChildren ? itemEls.current[idx] : null,
+                  preferLeftRef.current,
+                )
+              }
+              onClick={(e) => {
+                if (!hasChildren) {
+                  e.stopPropagation();
+                  item.fn(e);
+                  onClose();
+                }
+              }}
+            >
+              {item.icon && <Icon name={item.icon as any} size={16} />}
+              <span>{item.label}</span>
+              {hasChildren && (
+                <span className="context-menu-arrow">
+                  <Icon name="ChevronRight" size={14} />
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Submenu levels — siblings of the root menu, not children */}
+      {submenuStack.map((level, depth) => (
+        <SubMenuPanel
+          key={depth}
+          items={level.items}
+          anchorEl={level.anchorEl}
+          onClose={onClose}
+          preferLeft={level.preferLeft}
+          openChildIdx={submenuStack[depth + 1] ? depth + 1 : null}
+          onOpenChild={(idx, anchorEl, preferLeft) =>
+            openSubmenuAt(depth + 1, idx, anchorEl, preferLeft)
+          }
+        />
+      ))}
+    </div>
+  );
 }
 
-export function useContextMenu() {
-  const [items, setItems] = useState<ContextMenuItem[] | null>(null);
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(
-    null,
+// ── GlobalContextMenu ─────────────────────────────────────────────────────────
+// Mount once at the app root. Reads the globalContextMenu signal so it always
+// renders outside every layout stacking context.
+
+export function GlobalContextMenu() {
+  const state = globalContextMenu.value;
+  if (!state) return null;
+  return (
+    <ContextMenu
+      x={state.x}
+      y={state.y}
+      items={state.items}
+      onClose={closeContextMenu}
+    />
   );
-
-  const showContextMenu = (event: MouseEvent, menuItems: ContextMenuItem[]) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setItems(menuItems);
-    setPosition({ x: event.clientX, y: event.clientY });
-  };
-
-  const closeContextMenu = () => {
-    setItems(null);
-    setPosition(null);
-  };
-
-  return {
-    showContextMenu,
-    closeContextMenu,
-    contextMenu: items,
-    position,
-  };
 }

@@ -35,6 +35,10 @@ import {
   voiceVideoRes,
   voiceVideoFps,
   roturFollowing,
+  channelsByServer,
+  serverNotifSettings,
+  channelNotifSettings,
+  type NotificationLevel,
   type PingSoundType,
   type BlockedMessageDisplay,
   type AppTheme,
@@ -153,10 +157,12 @@ export function SettingsModal() {
       const data = await claimDaily();
       const earned = data.amount ?? data.credits ?? "";
       setDailyMsg(earned ? `Claimed ${earned} RC!` : "Claimed!");
-      // Refresh profile credits
-      if (currentUser.value?.username) {
-        const p = await getProfile(currentUser.value.username, false);
-        setProfile(p);
+      // Update credits locally from the response rather than re-fetching the profile.
+      if (earned && profile) {
+        setProfile({
+          ...profile,
+          currency: (profile.currency || 0) + Number(earned),
+        });
       }
     } catch (e: any) {
       // Try to get time remaining
@@ -1686,6 +1692,112 @@ function NotificationsTab() {
           label="Play sound for DM messages"
           description="Play the ping sound when you receive a new DM. Pings (@mentions and replies) always play a sound regardless of this setting."
         />
+      </div>
+
+      {/* Per-server notification overrides */}
+      <div className="settings-field">
+        <label>Server Notifications</label>
+        <p className="settings-field-hint">
+          Override notification level per server. Channel overrides take
+          priority over server overrides.
+        </p>
+        <div className="notif-override-list">
+          {servers.value.map((server) => {
+            const level: NotificationLevel =
+              serverNotifSettings.value[server.url] ?? "mentions";
+            return (
+              <div key={server.url} className="notif-override-row">
+                <span className="notif-override-name">{server.name}</span>
+                <select
+                  className="notif-override-select"
+                  value={level}
+                  onChange={(e) => {
+                    const v = (e.target as HTMLSelectElement)
+                      .value as NotificationLevel;
+                    if (v === "mentions") {
+                      const next = { ...serverNotifSettings.value };
+                      delete next[server.url];
+                      serverNotifSettings.value = next;
+                    } else {
+                      serverNotifSettings.value = {
+                        ...serverNotifSettings.value,
+                        [server.url]: v,
+                      };
+                    }
+                  }}
+                >
+                  <option value="all">All Messages</option>
+                  <option value="mentions">Mentions Only</option>
+                  <option value="none">Mute</option>
+                </select>
+              </div>
+            );
+          })}
+          {servers.value.length === 0 && (
+            <p className="settings-field-hint">No servers joined.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Per-channel notification overrides */}
+      <div className="settings-field">
+        <label>Channel Overrides</label>
+        <p className="settings-field-hint">
+          Channels with a custom notification level. Right-click any channel to
+          change its setting.
+        </p>
+        <div className="notif-override-list">
+          {Object.entries(channelNotifSettings.value).map(([key, level]) => {
+            const [sUrl, ...channelParts] = key.split(":");
+            const channelName = channelParts.join(":");
+            const server = servers.value.find((s) => s.url === sUrl);
+            const serverName = server?.name ?? sUrl;
+            return (
+              <div key={key} className="notif-override-row">
+                <span className="notif-override-name">
+                  <span className="notif-override-server">{serverName}</span>#
+                  {channelName}
+                </span>
+                <select
+                  className="notif-override-select"
+                  value={level}
+                  onChange={(e) => {
+                    const v = (e.target as HTMLSelectElement)
+                      .value as NotificationLevel;
+                    if (v === "mentions") {
+                      const next = { ...channelNotifSettings.value };
+                      delete next[key];
+                      channelNotifSettings.value = next;
+                    } else {
+                      channelNotifSettings.value = {
+                        ...channelNotifSettings.value,
+                        [key]: v,
+                      };
+                    }
+                  }}
+                >
+                  <option value="all">All Messages</option>
+                  <option value="mentions">Mentions Only (default)</option>
+                  <option value="none">Mute</option>
+                </select>
+                <button
+                  className="icon-btn"
+                  title="Remove override"
+                  onClick={() => {
+                    const next = { ...channelNotifSettings.value };
+                    delete next[key];
+                    channelNotifSettings.value = next;
+                  }}
+                >
+                  <Icon name="X" size={14} />
+                </button>
+              </div>
+            );
+          })}
+          {Object.keys(channelNotifSettings.value).length === 0 && (
+            <p className="settings-field-hint">No channel overrides set.</p>
+          )}
+        </div>
       </div>
     </div>
   );

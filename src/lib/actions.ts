@@ -18,6 +18,9 @@ import {
   DM_SERVER_URL,
   SPECIAL_CHANNELS,
   setPendingDMAddUsername,
+  blockedUsers,
+  friends,
+  friendRequests,
 } from "../state";
 import { renderGuildSidebarSignal, renderChannelsSignal } from "./ui-signals";
 import {
@@ -110,7 +113,6 @@ export async function switchServer(url: string): Promise<boolean> {
     renderGuildSidebarSignal.value++;
     renderChannelsSignal.value++;
     if (url === DM_SERVER_URL) {
-      await fetchMyAccountData();
       selectHomeChannel();
     } else {
       const saved = await dbSession.get<string>(`lastChannel_${url}`, "");
@@ -138,7 +140,6 @@ export async function switchServer(url: string): Promise<boolean> {
     renderGuildSidebarSignal.value++;
     renderChannelsSignal.value++;
     if (url === DM_SERVER_URL) {
-      await fetchMyAccountData();
       selectHomeChannel();
     } else {
       const saved = await dbSession.get<string>(`lastChannel_${url}`, "");
@@ -339,30 +340,37 @@ export async function openDMWith(username: string): Promise<void> {
 
 export async function sendFriendRequest(username: string): Promise<void> {
   await sendFriendRequestApi(username);
-  await fetchMyAccountData();
+  // Outgoing requests aren't tracked in local state; nothing to update.
 }
 
 export async function removeFriend(username: string): Promise<void> {
   await removeFriendApi(username);
-  await fetchMyAccountData();
+  friends.value = friends.value.filter((f) => f !== username);
 }
 
 export async function acceptFriend(username: string): Promise<void> {
   await acceptFriendRequestApi(username);
-  await fetchMyAccountData();
+  friendRequests.value = friendRequests.value.filter((r) => r !== username);
+  if (!friends.value.includes(username)) {
+    friends.value = [...friends.value, username];
+  }
 }
 
 export async function denyFriend(username: string): Promise<void> {
   await rejectFriendRequestApi(username);
-  await fetchMyAccountData();
+  friendRequests.value = friendRequests.value.filter((r) => r !== username);
 }
 
 export async function blockUser(username: string): Promise<void> {
   await blockUserApi(username);
-  await fetchMyAccountData();
+  if (!blockedUsers.value.includes(username)) {
+    blockedUsers.value = [...blockedUsers.value, username];
+  }
+  friends.value = friends.value.filter((f) => f !== username);
+  friendRequests.value = friendRequests.value.filter((r) => r !== username);
 }
 
 export async function unblockUser(username: string): Promise<void> {
   await unblockUserApi(username);
-  await fetchMyAccountData();
+  blockedUsers.value = blockedUsers.value.filter((u) => u !== username);
 }
