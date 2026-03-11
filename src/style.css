@@ -11165,6 +11165,7 @@ body,
   justify-content: center;
   overflow: auto;
   padding: 12px;
+  max-height: 100%;
 }
 
 .voice-call-video-tile {
@@ -11197,9 +11198,8 @@ body,
 
 .voice-call-video-element {
   display: block;
-  height: 100%;
   object-fit: contain;
-  width: 100%;
+  height: 100%;
 }
 
 .voice-call-video-label {

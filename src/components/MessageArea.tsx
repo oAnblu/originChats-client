@@ -26,7 +26,6 @@ import {
   pingsInboxOffset,
   PINGS_INBOX_LIMIT,
   reachedOldestByServer,
-  currentUserByServer,
 } from "../state";
 
 import {
@@ -42,7 +41,7 @@ import {
   showContextMenu,
   showVoiceCallView,
 } from "../lib/ui-signals";
-import { voiceManager, voiceState } from "../voice";
+import { voiceState } from "../voice";
 import { wsSend } from "../lib/websocket";
 import {
   highlightCodeInContainer,
@@ -70,6 +69,7 @@ import { avatarUrl } from "../utils";
 import { ErrorBannerStack } from "./ErrorBanner";
 import { createGift, ROTUR_GIFT_URL } from "../lib/rotur-api";
 import { VoiceCallView } from "./VoiceCallView";
+import { CallButton } from "./buttons/CallButton";
 
 interface PendingImage {
   url: string;
@@ -1531,17 +1531,7 @@ export function MessageArea() {
   // Only channels explicitly typed as "chat" get the call button + embedded panel
   const isChatChannel = ch !== null && ch.type === "chat";
   const voice = voiceState.value;
-  const myUsername = currentUserByServer.value[serverUrl.value]?.username;
   const inCallHere = isChatChannel && voice.currentChannel === ch?.name;
-
-  const handleCallBtn = () => {
-    if (!ch) return;
-    if (inCallHere) {
-      voiceManager.leaveChannel();
-    } else {
-      voiceManager.joinChannel(ch.name, myUsername, ch.type);
-    }
-  };
 
   return (
     <div className="main-content-wrapper">
@@ -1556,13 +1546,7 @@ export function MessageArea() {
         </div>
         <div className="main-header-right">
           {isChatChannel && (
-            <button
-              className={`header-icon-btn ${inCallHere ? "active" : ""}`}
-              onClick={handleCallBtn}
-              title={inCallHere ? "Open call" : "Start call"}
-            >
-              <Icon name={inCallHere ? "PhoneCall" : "Phone"} size={20} />
-            </button>
+            <CallButton className="header-icon-btn" iconSize={20} />
           )}
           <button
             className={`header-icon-btn ${rightPanelView.value === "inbox" ? "active" : ""}`}

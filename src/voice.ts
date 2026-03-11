@@ -78,6 +78,13 @@ interface PeerConn {
   audioStream: MediaStream | null;
   screenStream: MediaStream | null;
   cameraStream: MediaStream | null;
+
+  // Retry timers for outbound video calls (setTimeout IDs)
+  screenRetryTimer: ReturnType<typeof setTimeout> | null;
+  cameraRetryTimer: ReturnType<typeof setTimeout> | null;
+  // How many retry attempts so far (for backoff)
+  screenRetryCount: number;
+  cameraRetryCount: number;
 }
 
 function emptyPeerConn(): PeerConn {
@@ -91,8 +98,17 @@ function emptyPeerConn(): PeerConn {
     audioStream: null,
     screenStream: null,
     cameraStream: null,
+    screenRetryTimer: null,
+    cameraRetryTimer: null,
+    screenRetryCount: 0,
+    cameraRetryCount: 0,
   };
 }
+
+// Max retry attempts and backoff ceiling (ms) for outbound video calls
+const VIDEO_RETRY_MAX = 6;
+const VIDEO_RETRY_BASE_MS = 1500;
+const VIDEO_RETRY_CAP_MS = 20_000;
 
 // ── Speaking detection ────────────────────────────────────────────────────────
 
@@ -121,6 +137,9 @@ class VoiceManager {
 
   // Per-peer connection records
   private _peers = new Map<string, PeerConn>();
+
+  // Periodic video health-check interval
+  private _videoHealthInterval: ReturnType<typeof setInterval> | null = null;
 
   // Internal state
   private _currentChannel: string | null = null;
@@ -234,6 +253,9 @@ class VoiceManager {
     } else {
       this._startLocalSpeakingDetection();
     }
+
+    // Start periodic health-check to catch silently dropped video calls
+    this._startVideoHealthCheck();
 
     // For chat channels the embedded panel in MessageArea shows automatically;
     // for all other channel types open the fullscreen overlay.
@@ -532,10 +554,19 @@ class VoiceManager {
     this._publish();
   }
 
-  /** Close all OUTBOUND video calls of a specific kind. */
+  /** Close all OUTBOUND video calls of a specific kind and cancel any retries. */
   private _closeVideoCalls(kind: VideoKind): void {
     const outKey = kind === "screen" ? "outScreenCall" : "outCameraCall";
+    const timerKey =
+      kind === "screen" ? "screenRetryTimer" : "cameraRetryTimer";
+    const countKey =
+      kind === "screen" ? "screenRetryCount" : "cameraRetryCount";
     for (const conn of this._peers.values()) {
+      if (conn[timerKey] !== null) {
+        clearTimeout(conn[timerKey]!);
+        conn[timerKey] = null;
+      }
+      conn[countKey] = 0;
       if (conn[outKey]) {
         try {
           conn[outKey]!.close();
@@ -584,11 +615,29 @@ class VoiceManager {
     kind: VideoKind,
     stream: MediaStream,
   ): void {
-    if (!this._peer) return;
+    if (!this._peer || this._peer.destroyed) return;
+
+    // Verify the stream is still live — don't try to call with a dead stream.
+    const videoTracks = stream.getVideoTracks();
+    if (videoTracks.length === 0 || videoTracks[0].readyState === "ended") {
+      vcWarn(`_callPeerVideo(${kind}): stream already ended, skipping`);
+      return;
+    }
+
     const conn = this._getConn(peerId);
     const outKey = kind === "screen" ? "outScreenCall" : "outCameraCall";
+    const timerKey =
+      kind === "screen" ? "screenRetryTimer" : "cameraRetryTimer";
+    const countKey =
+      kind === "screen" ? "screenRetryCount" : "cameraRetryCount";
 
-    // Close any existing OUTBOUND call of this kind (never touch inbound slots)
+    // Cancel any pending retry for this kind — we're about to make a fresh call.
+    if (conn[timerKey] !== null) {
+      clearTimeout(conn[timerKey]!);
+      conn[timerKey] = null;
+    }
+
+    // Close any existing OUTBOUND call of this kind (never touch inbound slots).
     if (conn[outKey]) {
       try {
         conn[outKey]!.close();
@@ -597,22 +646,113 @@ class VoiceManager {
     }
 
     const call = this._peer.call(peerId, stream, { metadata: { kind } });
-    if (!call) return;
+    if (!call) {
+      vcWarn(
+        `_callPeerVideo(${kind}): peer.call() returned null for ${peerId}`,
+      );
+      this._scheduleVideoRetry(peerId, kind, stream);
+      return;
+    }
     conn[outKey] = call;
+
+    // PeerJS fires "stream" on outbound calls when the answerer sends a stream
+    // back. We don't use it (answerers send an empty stream) but listening keeps
+    // the connection alive and lets us detect a successful ICE exchange.
+    let iceEstablished = false;
+    call.on("stream", () => {
+      iceEstablished = true;
+      // Reset retry counter — ICE succeeded.
+      const c = this._peers.get(peerId);
+      if (c) c[countKey] = 0;
+    });
 
     call.on("close", () => {
       const c = this._peers.get(peerId);
-      if (c && c[outKey] === call) {
-        c[outKey] = null;
+      if (!c || c[outKey] !== call) return;
+      c[outKey] = null;
+      // If the stream is still live and we haven't explicitly stopped this
+      // kind, schedule a retry so the remote sees the stream again.
+      const localStream =
+        kind === "screen" ? this._localScreenStream : this._localCameraStream;
+      if (localStream && !this._peer?.destroyed) {
+        vcWarn(`Outbound ${kind} call to ${peerId} closed — will retry`);
+        this._scheduleVideoRetry(peerId, kind, localStream);
       }
     });
+
     call.on("error", (err) => {
       vcWarn(`Outbound ${kind} call error for ${peerId}:`, err);
       const c = this._peers.get(peerId);
-      if (c && c[outKey] === call) {
-        c[outKey] = null;
+      if (!c || c[outKey] !== call) return;
+      c[outKey] = null;
+      const localStream =
+        kind === "screen" ? this._localScreenStream : this._localCameraStream;
+      if (localStream && !this._peer?.destroyed) {
+        this._scheduleVideoRetry(peerId, kind, localStream);
       }
     });
+  }
+
+  /**
+   * Schedule a retry for a failed outbound video call, with exponential
+   * backoff capped at VIDEO_RETRY_CAP_MS.  Gives up after VIDEO_RETRY_MAX
+   * attempts (the remote may have left, or their client doesn't support it).
+   */
+  private _scheduleVideoRetry(
+    peerId: string,
+    kind: VideoKind,
+    stream: MediaStream,
+  ): void {
+    const conn = this._peers.get(peerId);
+    if (!conn) return; // peer was detached
+
+    const timerKey =
+      kind === "screen" ? "screenRetryTimer" : "cameraRetryTimer";
+    const countKey =
+      kind === "screen" ? "screenRetryCount" : "cameraRetryCount";
+
+    if (conn[countKey] >= VIDEO_RETRY_MAX) {
+      vcWarn(
+        `Giving up ${kind} retries for ${peerId} after ${conn[countKey]} attempts`,
+      );
+      conn[countKey] = 0;
+      return;
+    }
+
+    // Cancel any existing timer before scheduling a new one.
+    if (conn[timerKey] !== null) {
+      clearTimeout(conn[timerKey]!);
+      conn[timerKey] = null;
+    }
+
+    const attempt = conn[countKey];
+    const delay = Math.min(
+      VIDEO_RETRY_BASE_MS * 2 ** attempt,
+      VIDEO_RETRY_CAP_MS,
+    );
+    conn[countKey] += 1;
+
+    vcWarn(
+      `Scheduling ${kind} retry #${conn[countKey]} for ${peerId} in ${delay}ms`,
+    );
+
+    conn[timerKey] = setTimeout(() => {
+      const c = this._peers.get(peerId);
+      if (!c) return; // peer left while we were waiting
+      c[timerKey] = null;
+
+      // Confirm the stream is still live before retrying.
+      const tracks = stream.getVideoTracks();
+      if (tracks.length === 0 || tracks[0].readyState === "ended") {
+        vcWarn(
+          `${kind} stream ended before retry #${c[countKey]} for ${peerId}`,
+        );
+        c[countKey] = 0;
+        return;
+      }
+
+      this._callPeerVideo(peerId, kind, stream);
+    }, delay);
   }
 
   private _onOutboundAudioStream(call: MediaConnection): void {
@@ -829,6 +969,15 @@ class VoiceManager {
   private _detachPeer(peerId: string): void {
     const conn = this._peers.get(peerId);
     if (conn) {
+      // Cancel any pending retry timers first
+      if (conn.screenRetryTimer !== null) {
+        clearTimeout(conn.screenRetryTimer);
+        conn.screenRetryTimer = null;
+      }
+      if (conn.cameraRetryTimer !== null) {
+        clearTimeout(conn.cameraRetryTimer);
+        conn.cameraRetryTimer = null;
+      }
       // Close all outbound calls
       try {
         conn.outAudioCall?.close();
@@ -858,8 +1007,16 @@ class VoiceManager {
   }
 
   private _cleanup(): void {
-    // Close all peer connections (both directions)
+    // Cancel all retry timers and close all peer connections (both directions)
     for (const conn of this._peers.values()) {
+      if (conn.screenRetryTimer !== null) {
+        clearTimeout(conn.screenRetryTimer);
+        conn.screenRetryTimer = null;
+      }
+      if (conn.cameraRetryTimer !== null) {
+        clearTimeout(conn.cameraRetryTimer);
+        conn.cameraRetryTimer = null;
+      }
       try {
         conn.outAudioCall?.close();
       } catch {}
@@ -883,6 +1040,9 @@ class VoiceManager {
 
     // Stop all local streams
     this._stopAllLocalStreams();
+
+    // Stop the video health-check
+    this._stopVideoHealthCheck();
 
     // Remove all audio elements
     document.querySelectorAll('[id^="vcaudio-"]').forEach((el) => el.remove());
@@ -923,6 +1083,53 @@ class VoiceManager {
       this._localCameraStream = null;
     }
     this._stopAudioStream();
+  }
+
+  // ── Video health-check ──────────────────────────────────────────────────────
+  //
+  // Every 8 seconds, scan all remote peers and re-push any video stream whose
+  // outbound call slot is null (meaning the call was never made, silently
+  // dropped, or closed without a "close" event firing).  This is a last-resort
+  // safety net against silent ICE failures.
+
+  private _startVideoHealthCheck(): void {
+    this._stopVideoHealthCheck();
+    this._videoHealthInterval = setInterval(() => {
+      if (!this._peer || this._peer.destroyed) return;
+      const myPeerId = this._peer.id;
+
+      for (const p of this._participants) {
+        if (!p.peer_id || p.peer_id === myPeerId) continue;
+        const conn = this._peers.get(p.peer_id);
+
+        if (this._localScreenStream) {
+          const tracks = this._localScreenStream.getVideoTracks();
+          const alive = tracks.length > 0 && tracks[0].readyState !== "ended";
+          const missing = !conn?.outScreenCall && !conn?.screenRetryTimer;
+          if (alive && missing) {
+            vcWarn(`Health-check: re-pushing screen to ${p.peer_id}`);
+            this._callPeerVideo(p.peer_id, "screen", this._localScreenStream);
+          }
+        }
+
+        if (this._localCameraStream) {
+          const tracks = this._localCameraStream.getVideoTracks();
+          const alive = tracks.length > 0 && tracks[0].readyState !== "ended";
+          const missing = !conn?.outCameraCall && !conn?.cameraRetryTimer;
+          if (alive && missing) {
+            vcWarn(`Health-check: re-pushing camera to ${p.peer_id}`);
+            this._callPeerVideo(p.peer_id, "camera", this._localCameraStream);
+          }
+        }
+      }
+    }, 8_000);
+  }
+
+  private _stopVideoHealthCheck(): void {
+    if (this._videoHealthInterval !== null) {
+      clearInterval(this._videoHealthInterval);
+      this._videoHealthInterval = null;
+    }
   }
 
   // ── Speaking detection ──────────────────────────────────────────────────────
