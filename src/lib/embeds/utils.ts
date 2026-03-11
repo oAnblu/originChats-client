@@ -1,0 +1,142 @@
+const YOUTUBE_REGEX =
+  /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/;
+const IMAGE_EXTENSIONS = [
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "svg",
+  "bmp",
+  "ico",
+  "avif",
+];
+const VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "ogg", "avi", "mkv"];
+const TRUSTED_DOMAINS = [
+  "avatars.rotur.dev",
+  "photos.rotur.dev",
+  "roturcdn.milosantos.com",
+  "img.youtube.com",
+  "media.tenor.com",
+  "media.discordapp.net",
+  "cdn.discordapp.com",
+];
+
+function hasExtension(url: string, extensions: string[]): boolean {
+  const urlLower = url.toLowerCase();
+  return extensions.some(
+    (ext) =>
+      urlLower.endsWith(`.${ext}`) ||
+      urlLower.includes(`.${ext}?`) ||
+      urlLower.includes(`.${ext}#`),
+  );
+}
+
+export function proxyImageUrl(url: string): string {
+  if (!url || url.startsWith("data:") || url.startsWith("blob:")) return url;
+  try {
+    const urlObj = new URL(url);
+    if (TRUSTED_DOMAINS.includes(urlObj.hostname)) return url;
+  } catch {}
+  return `https://wsrv.nl/?url=${encodeURIComponent(url)}`;
+}
+
+export async function detectEmbedType(url: string) {
+  const ytMatch = url.match(YOUTUBE_REGEX);
+  if (ytMatch) return { type: "youtube", url, videoId: ytMatch[1] };
+
+  const giftMatch = url.match(/rotur\.dev\/gift\?code=([A-Z0-9-]+)/i);
+  if (giftMatch) {
+    return { type: "gift", url, giftCode: giftMatch[1] };
+  }
+
+  const commitMatch = url.match(
+    /github\.com\/([^/]+)\/([^/]+)\/commit\/([a-f0-9]{7,40})/i,
+  );
+  if (commitMatch) {
+    return {
+      type: "github_commit",
+      url,
+      owner: commitMatch[1],
+      repo: commitMatch[2],
+      sha: commitMatch[3],
+    };
+  }
+
+  if (/tenor\.com\/view\/[\w-]+-\d+(?:\?.*)?$/i.test(url)) {
+    const id = url.match(/tenor\.com\/view\/[\w-]+-(\d+)/i)?.[1];
+    return { type: "tenor", url, tenorId: id };
+  }
+
+  if (/github\.com\/([a-zA-Z0-9-]+(?:\/[a-zA-Z0-9._-]+)?)(?:\/)?$/i.test(url)) {
+    const path = url.match(
+      /github\.com\/([a-zA-Z0-9-]+(?:\/[a-zA-Z0-9._-]+)?)/i,
+    )?.[1];
+    const type = path?.includes("/") ? "github_repo" : "github_user";
+    return { type, url, path };
+  }
+
+  if (hasExtension(url, VIDEO_EXTENSIONS) || url.startsWith("data:video/")) {
+    return { type: "video", url };
+  }
+  if (hasExtension(url, IMAGE_EXTENSIONS) || url.startsWith("data:image/")) {
+    return { type: "image", url };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, {
+      method: "HEAD",
+      mode: "cors",
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const ct = res.headers.get("Content-Type") || "";
+      if (ct.startsWith("video/")) return { type: "video", url };
+      if (ct.startsWith("image/")) return { type: "image", url };
+    }
+  } catch (err) {
+    console.debug("HEAD request failed for", url, err);
+  }
+
+  return { type: "unknown", url };
+}
+
+export function formatNumber(num: number): string {
+  if (num == null) return "?";
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
+  if (num >= 1_000) return (num / 1_000).toFixed(1) + "k";
+  return num.toString();
+}
+
+export function formatDate(date: Date): string {
+  if (isNaN(date.getTime())) {
+    return "Unknown";
+  }
+  const diff = Date.now() - date.getTime();
+  if (isNaN(diff) || diff < 0) return "Just now";
+  const minutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  const months = Math.floor(days / 30);
+  const years = Math.floor(days / 365);
+  if (years > 0) return `${years}y ago`;
+  if (months > 0) return `${months}mo ago`;
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return "Just now";
+}
+
+export function isTenorOnlyMessage(
+  embedLinks: string[],
+  content: string,
+): boolean {
+  return (
+    embedLinks.length === 1 &&
+    /tenor\.com\/view\/[\w-]+-\d+(?:\?.*)?$/i.test(embedLinks[0]) &&
+    content.trim() === embedLinks[0]
+  );
+}

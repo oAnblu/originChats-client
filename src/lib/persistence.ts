@@ -1,0 +1,86 @@
+import {
+  token,
+  servers,
+  readTimesByServer,
+  friends,
+  friendRequests,
+  blockedUsers,
+} from "../state";
+import { getOriginFS, DEFAULT_SERVERS } from "../state";
+import type { Server } from "../types";
+import { getFriends } from "./rotur-api";
+
+export async function loadServers(): Promise<Server[]> {
+  const originFS = getOriginFS();
+  if (!originFS) return [...DEFAULT_SERVERS];
+  try {
+    await originFS.loadIndex();
+    const content = await originFS.readFileContent(
+      "/application data/chats@mistium/servers.json",
+    );
+    return (JSON.parse(content) as Server[]).filter(
+      (s) => s.url !== "dms.mistium.com",
+    );
+  } catch {
+    return [...DEFAULT_SERVERS];
+  }
+}
+
+export async function saveServers(): Promise<void> {
+  const originFS = getOriginFS();
+  if (!originFS) return;
+  const path = "/application data/chats@mistium/servers.json";
+  try {
+    await originFS.createFolders("/application data/chats@mistium");
+    if (await originFS.exists(path))
+      await originFS.writeFile(path, JSON.stringify(servers.value));
+    else await originFS.createFile(path, JSON.stringify(servers.value));
+    await originFS.commit();
+  } catch (error) {
+    console.error("Failed to save servers:", error);
+  }
+}
+
+export async function loadReadTimes(): Promise<
+  Record<string, Record<string, number>>
+> {
+  const originFS = getOriginFS();
+  if (!originFS) return {};
+  try {
+    await originFS.loadIndex();
+    const content = await originFS.readFileContent(
+      "/application data/chats@mistium/read_times.json",
+    );
+    return JSON.parse(content);
+  } catch {
+    return {};
+  }
+}
+
+export async function saveReadTimes(): Promise<void> {
+  const originFS = getOriginFS();
+  if (!originFS) return;
+  const path = "/application data/chats@mistium/read_times.json";
+  try {
+    await originFS.createFolders("/application data/chats@mistium");
+    if (await originFS.exists(path))
+      await originFS.writeFile(path, JSON.stringify(readTimesByServer.value));
+    else
+      await originFS.createFile(path, JSON.stringify(readTimesByServer.value));
+    await originFS.commit();
+  } catch (error) {
+    console.error("Failed to save read times:", error);
+  }
+}
+
+export async function fetchMyAccountData(): Promise<void> {
+  if (!token.value) return;
+  try {
+    const data = await getFriends();
+    friends.value = data.friends;
+    friendRequests.value = data.requests;
+    blockedUsers.value = data.blocked;
+  } catch (error) {
+    console.error("Failed to fetch account data:", error);
+  }
+}

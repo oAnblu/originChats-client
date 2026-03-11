@@ -1,0 +1,227 @@
+export interface Channel {
+  name: string;
+  type: string;
+  display_name?: string;
+  icon?: string;
+  permissions?: { view?: string[]; send?: string[] };
+  voice_state?: VoiceUser[];
+  last_message?: number;
+  size?: number;
+}
+
+export interface VoiceUser {
+  username: string;
+  muted?: boolean;
+  pfp?: string;
+}
+
+export interface RoturAccount {
+  username: string;
+  pfp?: string;
+  banner?: string;
+  bio?: string;
+  pronouns?: string;
+  status?: "online" | "idle" | "offline";
+  created?: number;
+  followers?: number;
+  following?: number;
+  currency?: number;
+  subscription?: string;
+  system?: string;
+}
+
+export interface ServerUser {
+  username: string;
+  roles?: string[];
+  color?: string | null;
+  status?: "online" | "idle" | "offline";
+  account?: RoturAccount;
+}
+
+export interface Message {
+  id?: string;
+  user: string;
+  content: string;
+  timestamp: number;
+  edited?: boolean;
+  pinned?: boolean;
+  reply_to?: { id: string; user: string };
+  ping?: boolean;
+  reactions?: Record<string, string[]>;
+  interaction?: { command: string; username: string };
+}
+
+export interface Server {
+  name: string;
+  url: string;
+  icon?: string | null;
+}
+
+export interface DMServer {
+  channel: string;
+  name: string;
+  username: string;
+  last_message?: number;
+}
+
+export interface MediaServer {
+  id: string;
+  name: string;
+  enabled: boolean;
+  uploadUrl: string;
+  method: string;
+  fileParamName?: string;
+  headers: Array<{ key: string; value: string }>;
+  bodyParams: Array<{ key: string; value: string }>;
+  responseUrlPath: string;
+  urlTemplate: string;
+  requiresAuth: boolean;
+  authType: "session" | "token" | "apiKey";
+  apiKey?: string;
+}
+
+export interface Role {
+  name: string;
+  color?: string | null;
+  description?: string;
+  hoisted?: boolean;
+  permissions?: string[] | Record<string, any>;
+}
+
+export type SlashOptionType = "str" | "int" | "float" | "bool" | "enum";
+
+export interface SlashCommandOption {
+  name: string;
+  description: string;
+  type: SlashOptionType;
+  required: boolean;
+  choices: string[] | null;
+}
+
+export interface SlashCommand {
+  name: string;
+  description: string;
+  options: SlashCommandOption[];
+  whitelistRoles: string[] | null;
+  blacklistRoles: string[] | null;
+  ephemeral: boolean;
+  registeredBy: string;
+}
+
+// ── Rotur API types ──────────────────────────────────────────────────────────
+
+/** Extended profile data returned by GET /profile */
+export interface RoturProfile extends RoturAccount {
+  standing?: string;
+  /** true = the authenticated caller is following this user */
+  followed?: boolean;
+  /** true = this user is following the authenticated caller */
+  follows_me?: boolean;
+  "sys.friends"?: string[];
+  "sys.requests"?: string[];
+  "sys.blocked"?: string[];
+  "sys.notes"?: Record<string, string>;
+  posts?: RoturPost[];
+  groups?: string[];
+  /** Custom status object — same shape as UserStatus in the API */
+  customStatus?: RoturStatusUpdate;
+}
+
+export interface RoturPost {
+  id: string;
+  user: string;
+  content: string;
+  timestamp: number;
+  likes?: number;
+  dislikes?: number;
+  replies?: number;
+  repost_of?: string;
+  pinned?: boolean;
+}
+
+export interface RoturGroup {
+  tag: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  member_count?: number;
+  owner?: string;
+  is_member?: boolean;
+}
+
+export interface RoturGroupDetails extends RoturGroup {
+  members?: string[];
+  roles?: Record<string, any>;
+  announcements?: RoturAnnouncement[];
+  created?: number;
+}
+
+export interface RoturAnnouncement {
+  id: string;
+  content: string;
+  author: string;
+  timestamp: number;
+}
+
+export interface RoturStanding {
+  standing: string;
+  level?: number;
+  history?: Array<{
+    action: string;
+    reason: string;
+    timestamp: number;
+  }>;
+}
+
+export interface RoturGift {
+  id?: string;
+  code?: string;
+  amount: number;
+  note?: string;
+  creator?: string;
+  claimed_by?: string;
+  claimed_at?: number;
+  cancelled_at?: number;
+  expires_at?: number;
+  is_expired?: boolean;
+  created_at?: number;
+}
+
+export interface RoturFollowersResult {
+  followers: string[];
+  count: number;
+}
+
+export interface RoturFollowingResult {
+  following: string[];
+  count: number;
+}
+
+/** Shape of the `status` object returned by GET /status/get */
+export interface RoturStatusUpdate {
+  /** "simple" | "activity" */
+  type?: string;
+  /** Plain-text content for simple statuses (may include a leading emoji) */
+  content?: string;
+  activity?: {
+    name: string;
+    description?: string;
+    image?: string;
+  };
+  created?: number;
+  expires?: number;
+}
+
+export interface RoturEconomyStats {
+  total_credits?: number;
+  total_users?: number;
+  average_credits?: number;
+  [key: string]: any;
+}
+
+export interface RoturUserStats {
+  total_users?: number;
+  active_users?: number;
+  new_users_today?: number;
+  [key: string]: any;
+}
