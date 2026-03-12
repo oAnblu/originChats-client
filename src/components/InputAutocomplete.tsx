@@ -90,9 +90,10 @@ function detectTrigger(text: string, cursorPos: number): TriggerInfo | null {
     }
 
     if (char === "/") {
-      // Only trigger slash autocomplete at the very start of the input or
-      // after whitespace, so it doesn't interfere with URLs or other text.
-      if (i > 0 && !/\s/.test(beforeCursor[i - 1])) return null;
+      // Only trigger slash autocomplete when / is the very first character
+      // of the message (position 0). A slash anywhere else (mid-sentence,
+      // after whitespace, in a URL, etc.) must not open the autocomplete.
+      if (i !== 0) return null;
       return {
         type: "slash",
         query: beforeCursor.substring(i + 1),

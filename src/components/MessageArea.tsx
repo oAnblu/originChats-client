@@ -198,8 +198,7 @@ function groupMessages(messages: Message[]): MessageGroup[] {
       !currentGroup ||
       msg.user !== currentGroup.head.user ||
       msg.timestamp - currentGroup.head.timestamp >= 300 ||
-      !!msg.reply_to ||
-      !!msg.edited;
+      !!msg.reply_to;
 
     if (shouldStartNewGroup) {
       if (currentGroup) groups.push(currentGroup);
@@ -1674,14 +1673,14 @@ export function MessageArea() {
                         <span className="timestamp">
                           {formatTimestamp(msg.timestamp)}
                         </span>
-                        {msg.edited && (
-                          <span className="edited-indicator">(edited)</span>
-                        )}
                       </div>
                       <MessageContent
                         content={msg.content}
                         currentUsername={currentUser.value?.username}
                       />
+                      {msg.edited && (
+                        <span className="edited-indicator">(edited)</span>
+                      )}
                       {renderReactions(msg, reactions)}
                     </div>
                   </div>
@@ -1707,14 +1706,14 @@ export function MessageArea() {
                         <span className="timestamp">
                           {formatTimestamp(msg.timestamp)}
                         </span>
-                        {msg.edited && (
-                          <span className="edited-indicator">(edited)</span>
-                        )}
                       </div>
                       <MessageContent
                         content={msg.content}
                         currentUsername={currentUser.value?.username}
                       />
+                      {msg.edited && (
+                        <span className="edited-indicator">(edited)</span>
+                      )}
                       {renderReactions(msg, reactions)}
                     </div>
                   </>
@@ -1727,6 +1726,9 @@ export function MessageArea() {
                   content={msg.content}
                   currentUsername={currentUser.value?.username}
                 />
+                {msg.edited && (
+                  <span className="edited-indicator">(edited)</span>
+                )}
                 {renderReactions(msg, reactions)}
               </div>
             )}

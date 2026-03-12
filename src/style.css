@@ -2328,7 +2328,6 @@ p {
   color: var(--text-dim);
   font-size: var(--font-xs);
   font-style: italic;
-  margin-left: 3px;
   opacity: 0.5;
   transition: opacity var(--anim-fast) var(--ease-out);
 }
@@ -4140,10 +4139,6 @@ a {
 
 .message-single:hover > .message-group-content > .hover-timestamp {
   color: var(--text-dim);
-}
-
-.message-single .hover-timestamp .edited-indicator {
-  margin-left: 4px;
 }
 
 .message-single:hover::before {
