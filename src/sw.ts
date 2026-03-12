@@ -4,7 +4,6 @@ import {
   createHandlerBoundToURL,
   precacheAndRoute,
 } from "workbox-precaching";
-import { clientsClaim } from "workbox-core";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { StaleWhileRevalidate } from "workbox-strategies";
 
@@ -12,10 +11,10 @@ declare const self: ServiceWorkerGlobalScope;
 
 // ── Workbox precache (injected by VitePWA at build time) ─────────────────────
 // __WB_MANIFEST is replaced by the list of precache entries.
+// skipWaiting/clientsClaim are intentionally omitted here — VitePWA's
+// registerType: "autoUpdate" handles the activation lifecycle correctly.
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
-clientsClaim();
-self.skipWaiting();
 
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("index.html"), {
