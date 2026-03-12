@@ -139,86 +139,65 @@ export function parseMarkdown(
     return placeholder;
   });
 
+  // Escape raw HTML in the plain text portions (code blocks and spoilers
+  // have already been extracted into placeholders and are escaped separately).
+  text = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
   text = text.replace(/`([^`]+)`/g, (match, code) => {
-    const escaped = code
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return `<code>${escaped}</code>`;
+    return `<code>${code}</code>`;
   });
 
-  text = text.replace(
-    /^#{6} (.*)$/gm,
-    (_, content) => `<h6>${escapeHtml(content)}</h6>`,
-  );
-  text = text.replace(
-    /^#{5} (.*)$/gm,
-    (_, content) => `<h5>${escapeHtml(content)}</h5>`,
-  );
-  text = text.replace(
-    /^#{4} (.*)$/gm,
-    (_, content) => `<h4>${escapeHtml(content)}</h4>`,
-  );
-  text = text.replace(
-    /^### (.*)$/gm,
-    (_, content) => `<h3>${escapeHtml(content)}</h3>`,
-  );
-  text = text.replace(
-    /^## (.*)$/gm,
-    (_, content) => `<h2>${escapeHtml(content)}</h2>`,
-  );
-  text = text.replace(
-    /^# (.*)$/gm,
-    (_, content) => `<h1>${escapeHtml(content)}</h1>`,
-  );
+  text = text.replace(/^#{6} (.*)$/gm, (_, content) => `<h6>${content}</h6>`);
+  text = text.replace(/^#{5} (.*)$/gm, (_, content) => `<h5>${content}</h5>`);
+  text = text.replace(/^#{4} (.*)$/gm, (_, content) => `<h4>${content}</h4>`);
+  text = text.replace(/^### (.*)$/gm, (_, content) => `<h3>${content}</h3>`);
+  text = text.replace(/^## (.*)$/gm, (_, content) => `<h2>${content}</h2>`);
+  text = text.replace(/^# (.*)$/gm, (_, content) => `<h1>${content}</h1>`);
 
   text = text.replace(
     /^> (.*)$/gm,
-    (_, content) => `<blockquote>${escapeHtml(content)}</blockquote>`,
+    (_, content) => `<blockquote>${content}</blockquote>`,
   );
 
   text = text.replace(
     /\*\*\*(.+?)\*\*\*/g,
-    (_, content) => `<strong><em>${escapeHtml(content)}</em></strong>`,
+    (_, content) => `<strong><em>${content}</em></strong>`,
   );
   text = text.replace(
     /___(.+?)___/g,
-    (_, content) => `<strong><em>${escapeHtml(content)}</em></strong>`,
+    (_, content) => `<strong><em>${content}</em></strong>`,
   );
 
   text = text.replace(
     /\*\*(.+?)\*\*/g,
-    (_, content) => `<strong>${escapeHtml(content)}</strong>`,
+    (_, content) => `<strong>${content}</strong>`,
   );
   text = text.replace(
     /__(.+?)__/g,
-    (_, content) => `<strong>${escapeHtml(content)}</strong>`,
+    (_, content) => `<strong>${content}</strong>`,
   );
 
-  text = text.replace(
-    /\*(.+?)\*/g,
-    (_, content) => `<em>${escapeHtml(content)}</em>`,
-  );
-  text = text.replace(
-    /_(.+?)_/g,
-    (_, content) => `<em>${escapeHtml(content)}</em>`,
-  );
+  text = text.replace(/\*(.+?)\*/g, (_, content) => `<em>${content}</em>`);
+  text = text.replace(/_(.+?)_/g, (_, content) => `<em>${content}</em>`);
 
   text = text.replace(/@&([a-zA-Z0-9_]+)/g, (match, roleName) => {
     if (
       mentionCtx?.validRoles &&
       !mentionCtx.validRoles.has(roleName.toLowerCase())
     ) {
-      return escapeHtml(match);
+      return match;
     }
-    return `<span class="role-mention" data-role="${escapeAttribute(roleName)}">@${escapeHtml(roleName)}</span>`;
+    return `<span class="role-mention" data-role="${escapeAttribute(roleName)}">@${roleName}</span>`;
   });
 
   text = text.replace(/@([a-zA-Z0-9_]+)/g, (match, user) => {
     if (mentionCtx && !mentionCtx.validUsernames.has(user.toLowerCase())) {
-      return escapeHtml(match);
+      return match;
     }
-    return `<span class="mention" data-user="${escapeAttribute(user)}">@${escapeHtml(user)}</span>`;
+    return `<span class="mention" data-user="${escapeAttribute(user)}">@${user}</span>`;
   });
 
   text = text.replace(/#([a-zA-Z0-9_-]+)/g, (match, channelName) => {
@@ -226,29 +205,37 @@ export function parseMarkdown(
       mentionCtx &&
       !mentionCtx.validChannels.has(channelName.toLowerCase())
     ) {
-      return escapeHtml(match);
+      return match;
     }
-    return `<span class="channel-mention" data-channel="${escapeAttribute(channelName)}">#${escapeHtml(channelName)}</span>`;
+    return `<span class="channel-mention" data-channel="${escapeAttribute(channelName)}">#${channelName}</span>`;
   });
 
   text = text.replace(/(https?:\/\/[^\s"']+\.[^\s"']+)/g, (match, url) => {
-    embedLinks.push(url);
-    const safeUrl = escapeAttribute(url);
-    const safeDisplayText = escapeHtml(url);
+    // url is already HTML-escaped (& → &amp; etc.); unescape to get the raw URL
+    // for use in href/src attributes, then re-escape for attribute context.
+    const rawUrl = url
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#x27;/g, "'");
+    embedLinks.push(rawUrl);
+    const safeUrl = escapeAttribute(rawUrl);
+    const safeDisplayText = url; // already HTML-escaped
 
-    if (YOUTUBE_REGEX.test(url)) {
+    if (YOUTUBE_REGEX.test(rawUrl)) {
       return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeDisplayText}</a>`;
     }
 
-    if (url.match(/tenor\.com\/view\/[\w-]+-\d+(?:\?.*)?$/i)) {
+    if (rawUrl.match(/tenor\.com\/view\/[\w-]+-\d+(?:\?.*)?$/i)) {
       return `<a href="${safeUrl}" class="tenor-embed" target="_blank" rel="noopener noreferrer">${safeDisplayText}</a>`;
     }
 
-    if (hasExtension(url, VIDEO_EXTENSIONS)) {
+    if (hasExtension(rawUrl, VIDEO_EXTENSIONS)) {
       return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeDisplayText}</a>`;
     }
 
-    if (hasExtension(url, IMAGE_EXTENSIONS)) {
+    if (hasExtension(rawUrl, IMAGE_EXTENSIONS)) {
       return `<img src="${proxyImageUrl(safeUrl)}" alt="image" class="message-image" data-image-url="${safeDisplayText}">`;
     }
 
@@ -283,6 +270,11 @@ export function highlightCodeInContainer(container: HTMLElement): void {
   container.querySelectorAll("pre code").forEach((block) => {
     const el = block as HTMLElement;
     if (el.dataset.highlighted) return;
+    const langClass = Array.from(el.classList).find((c) =>
+      c.startsWith("language-"),
+    );
+    const lang = langClass?.slice("language-".length);
+    if (lang && !hljs.getLanguage(lang)) return;
     hljs.highlightElement(el);
   });
 }
