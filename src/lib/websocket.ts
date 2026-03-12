@@ -651,13 +651,18 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
           };
         }
         const channelMsgs = messagesByServer.value[sUrl][msg.channel];
-        messagesByServer.value = {
-          ...messagesByServer.value,
-          [sUrl]: {
-            ...messagesByServer.value[sUrl],
-            [msg.channel]: [...channelMsgs, msg.message],
-          },
-        };
+        const alreadyExists = channelMsgs.some(
+          (m: any) => m.id === msg.message.id,
+        );
+        if (!alreadyExists) {
+          messagesByServer.value = {
+            ...messagesByServer.value,
+            [sUrl]: {
+              ...messagesByServer.value[sUrl],
+              [msg.channel]: [...channelMsgs, msg.message],
+            },
+          };
+        }
       }
 
       const chList = channelsByServer.value[sUrl];
@@ -886,7 +891,11 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         return m;
       });
 
-      const mergedMsgs = [...newMessages, ...existingMsgs];
+      const existingIds = new Set(existingMsgs.map((m: any) => m.id));
+      const deduplicatedNew = newMessages.filter(
+        (m: any) => !existingIds.has(m.id),
+      );
+      const mergedMsgs = [...deduplicatedNew, ...existingMsgs];
 
       // If this was a pagination (scroll-up) fetch and the server returned fewer
       // messages than the requested limit, we've reached the beginning of history.
