@@ -219,6 +219,28 @@ export const sendTypingIndicators = signal<boolean>(true);
 
 export const dmMessageSound = signal<boolean>(true);
 
+// ─── Offline / Push notification settings ─────────────────────────────────────
+/**
+ * True when the app shell has loaded but all network attempts (token
+ * validation, WebSocket connections) have failed — device is offline.
+ */
+export const isOffline = signal<boolean>(false);
+
+/**
+ * Per-server offline push notification opt-in.
+ * keyed by serverUrl → boolean (true = user has enabled Web Push for this server).
+ * Persisted in IDB settings under "offlinePushSettings".
+ */
+export const offlinePushServers = signal<Record<string, boolean>>({});
+
+/**
+ * Stored Web Push subscriptions per server.
+ * keyed by serverUrl → serialised PushSubscriptionJSON.
+ * Kept in memory only; subscription objects are fetched from PushManager on demand.
+ */
+export const pushSubscriptionsByServer: Record<string, PushSubscriptionJSON> =
+  {};
+
 // ─── Notification settings ─────────────────────────────────────────────────────
 // Per-server and per-channel notification level overrides.
 // "all"      — ping (sound + badge) for every message
@@ -602,6 +624,10 @@ export async function initSettingsFromDb(): Promise<void> {
     "channelNotifSettings",
     {},
   );
+  offlinePushServers.value = await s.get<Record<string, boolean>>(
+    "offlinePushSettings",
+    {},
+  );
 
   _settingsLoaded = true;
 }
@@ -753,4 +779,8 @@ effect(() => {
 effect(() => {
   if (_settingsLoaded)
     dbSettings.set("channelNotifSettings", channelNotifSettings.value);
+});
+effect(() => {
+  if (_settingsLoaded)
+    dbSettings.set("offlinePushSettings", offlinePushServers.value);
 });

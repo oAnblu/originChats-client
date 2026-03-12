@@ -24,6 +24,10 @@ import {
   blockedUsers,
   roturFollowing,
   roturStatuses,
+  isOffline,
+  offlinePushServers,
+  serverNotifSettings,
+  channelNotifSettings,
 } from "./state";
 
 import {
@@ -36,7 +40,11 @@ import {
   mobilePanelOpen,
   closeMobileNav,
 } from "./lib/ui-signals";
-import { loadServers, loadReadTimes } from "./lib/persistence";
+import {
+  loadServers,
+  loadReadTimes,
+  loadNotifSettings,
+} from "./lib/persistence";
 import { OriginFSClientClass } from "./originFSKit";
 import { connectToServer } from "./lib/websocket";
 import { requestNotificationPermission } from "./lib/websocket";
@@ -69,182 +77,224 @@ import { NotesTab } from "./components/NotesTab";
 import { VoiceCallView } from "./components/VoiceCallView";
 import { GlobalContextMenu } from "./components/ContextMenu";
 import { DiscoveryPage } from "./components/DiscoveryPage";
+import { OfflineScreen } from "./components/OfflineScreen";
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      // Load settings from IDB
-      await initSettingsFromDb();
+  const boot = async () => {
+    isOffline.value = false;
+    setIsLoading(true);
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlToken = urlParams.get("token");
-      const serverParam = urlParams.get("server");
-      const savedToken = await dbSession.get<string>("token", "");
+    // Load settings from IDB
+    await initSettingsFromDb();
 
-      const authRedirect = () => {
-        dbSession.del("token");
-        window.location.href = getAuthRedirectUrl(window.location.href);
-      };
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlToken = urlParams.get("token");
+    const serverParam = urlParams.get("server");
+    const savedToken = await dbSession.get<string>("token", "");
 
-      // Persist the ?server= param across the auth redirect via sessionStorage
-      if (serverParam) {
-        sessionStorage.setItem("pendingServerJoin", serverParam);
+    const authRedirect = () => {
+      dbSession.del("token");
+      window.location.href = getAuthRedirectUrl(window.location.href);
+    };
+
+    // Persist the ?server= param across the auth redirect via sessionStorage
+    if (serverParam) {
+      sessionStorage.setItem("pendingServerJoin", serverParam);
+    }
+
+    if (urlToken) {
+      token.value = urlToken;
+      await dbSession.set("token", urlToken);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (savedToken) {
+      token.value = savedToken;
+    } else {
+      // No token at all — if offline, show offline screen; otherwise redirect
+      if (!navigator.onLine) {
+        isOffline.value = true;
+        setIsLoading(false);
+        return;
       }
+      authRedirect();
+      return;
+    }
 
-      if (urlToken) {
-        token.value = urlToken;
-        await dbSession.set("token", urlToken);
-        window.history.replaceState(
-          {},
-          document.title,
-          window.location.pathname,
+    // Validate the token before proceeding — fails when offline
+    let meData: any;
+    try {
+      meData = await validateToken();
+    } catch {
+      meData = null;
+    }
+
+    if (!meData) {
+      if (!navigator.onLine) {
+        isOffline.value = true;
+        setIsLoading(false);
+        return;
+      }
+      authRedirect();
+      return;
+    }
+
+    friends.value = meData["sys.friends"] || [];
+    friendRequests.value = meData["sys.requests"] || [];
+    blockedUsers.value = meData["sys.blocked"] || [];
+
+    // Seed follow state in the background — non-blocking
+    getFollowing(meData.username)
+      .then((data) => {
+        roturFollowing.value = new Set(
+          (data.following || []).map((u: string) => u.toLowerCase()),
         );
-      } else if (savedToken) {
-        token.value = savedToken;
-      } else {
-        authRedirect();
-        return;
-      }
+      })
+      .catch(() => { });
 
-      // Validate the token before proceeding
-      const meData = await validateToken();
-      if (!meData) {
-        authRedirect();
-        return;
-      }
-      friends.value = meData["sys.friends"] || [];
-      friendRequests.value = meData["sys.requests"] || [];
-      blockedUsers.value = meData["sys.blocked"] || [];
+    // Seed own custom status — non-blocking
+    getStatus(meData.username)
+      .then((s) => {
+        if (s?.content) {
+          roturStatuses.value = {
+            ...roturStatuses.value,
+            [meData.username.toLowerCase()]: s,
+          };
+        }
+      })
+      .catch(() => { });
 
-      // Seed follow state in the background — non-blocking
-      getFollowing(meData.username)
-        .then((data) => {
-          roturFollowing.value = new Set(
-            (data.following || []).map((u: string) => u.toLowerCase()),
-          );
-        })
-        .catch(() => {});
+    const originFS = new OriginFSClientClass(token.value!);
+    setOriginFS(originFS);
 
-      // Seed own custom status — non-blocking
-      getStatus(meData.username)
-        .then((s) => {
-          if (s?.content) {
-            roturStatuses.value = {
-              ...roturStatuses.value,
-              [meData.username.toLowerCase()]: s,
-            };
-          }
-        })
-        .catch(() => {});
+    const loadedServers = await loadServers();
+    servers.value = loadedServers;
 
-      const originFS = new OriginFSClientClass(token.value!);
-      setOriginFS(originFS);
+    const savedServerUrl =
+      (await dbSession.get<string>("serverUrl", "")) || DM_SERVER_URL;
+    serverUrl.value = savedServerUrl;
 
-      const loadedServers = await loadServers();
-      servers.value = loadedServers;
+    // Load read times: merge IDB (local) with OriginFS (cloud)
+    const localReadTimes: Record<string, Record<string, number>> = {};
 
-      const savedServerUrl =
-        (await dbSession.get<string>("serverUrl", "")) || DM_SERVER_URL;
-      serverUrl.value = savedServerUrl;
+    // Always load DM read times (DM_SERVER_URL is not in loadedServers)
+    localReadTimes[DM_SERVER_URL] = await dbReadTimes.get(DM_SERVER_URL);
 
-      // Load read times: merge IDB (local) with OriginFS (cloud)
-      const localReadTimes: Record<string, Record<string, number>> = {};
+    for (const server of loadedServers) {
+      localReadTimes[server.url] = await dbReadTimes.get(server.url);
+    }
 
-      // Always load DM read times (DM_SERVER_URL is not in loadedServers)
-      localReadTimes[DM_SERVER_URL] = await dbReadTimes.get(DM_SERVER_URL);
-
-      for (const server of loadedServers) {
-        localReadTimes[server.url] = await dbReadTimes.get(server.url);
-      }
-
-      try {
-        const cloudReadTimes = await loadReadTimes();
-        for (const serverUrlKey in cloudReadTimes) {
-          if (!localReadTimes[serverUrlKey]) {
-            localReadTimes[serverUrlKey] = cloudReadTimes[serverUrlKey];
-          } else {
-            for (const channelName in cloudReadTimes[serverUrlKey]) {
-              if (!(channelName in localReadTimes[serverUrlKey])) {
-                localReadTimes[serverUrlKey][channelName] =
-                  cloudReadTimes[serverUrlKey][channelName];
-              }
+    try {
+      const cloudReadTimes = await loadReadTimes();
+      for (const serverUrlKey in cloudReadTimes) {
+        if (!localReadTimes[serverUrlKey]) {
+          localReadTimes[serverUrlKey] = cloudReadTimes[serverUrlKey];
+        } else {
+          for (const channelName in cloudReadTimes[serverUrlKey]) {
+            if (!(channelName in localReadTimes[serverUrlKey])) {
+              localReadTimes[serverUrlKey][channelName] =
+                cloudReadTimes[serverUrlKey][channelName];
             }
           }
         }
-      } catch (e) {
-        console.warn("[App] Failed to load cloud read times:", e);
+      }
+    } catch (e) {
+      console.warn("[App] Failed to load cloud read times:", e);
+    }
+
+    readTimesByServer.value = localReadTimes;
+
+    // Load notification settings from OriginFS and merge with IDB values.
+    // Cloud entries win for keys not already set locally (same strategy as read times).
+    try {
+      const cloudNotif = await loadNotifSettings();
+      const mergedServer = {
+        ...cloudNotif.serverNotif,
+        ...serverNotifSettings.value,
+      };
+      const mergedChannel = {
+        ...cloudNotif.channelNotif,
+        ...channelNotifSettings.value,
+      };
+      serverNotifSettings.value = mergedServer;
+      channelNotifSettings.value = mergedChannel;
+    } catch (e) {
+      console.warn("[App] Failed to load cloud notif settings:", e);
+    }
+
+    connectToServer(DM_SERVER_URL);
+    loadedServers.forEach((s) => {
+      if (s.url !== DM_SERVER_URL) connectToServer(s.url);
+    });
+
+    await loadShortcodes();
+    requestNotificationPermission();
+
+    const pendingServer = sessionStorage.getItem("pendingServerJoin") ?? null;
+
+    if (pendingServer && pendingServer !== DM_SERVER_URL) {
+      sessionStorage.removeItem("pendingServerJoin");
+
+      const normalized = pendingServer.replace(/^wss?:\/\//, "");
+
+      // Add to server list if not already present
+      if (!servers.value.some((s) => s.url === normalized)) {
+        servers.value = [
+          ...servers.value,
+          { name: normalized, url: normalized, icon: null },
+        ];
+        const { saveServers } = await import("./lib/persistence");
+        await saveServers();
       }
 
-      readTimesByServer.value = localReadTimes;
+      const connected = await switchServer(normalized);
 
-      connectToServer(DM_SERVER_URL);
-      loadedServers.forEach((s) => {
-        if (s.url !== DM_SERVER_URL) connectToServer(s.url);
-      });
+      if (connected) {
+        // switchServer lands on the first channel immediately if channels are
+        // already loaded, but for a fresh connection they arrive via the
+        // channels_get WS response shortly after. Poll until they appear.
+        const waitForChannel = () =>
+          new Promise<void>((resolve) => {
+            const check = () => {
+              const chs = channelsByServer.value[normalized] ?? [];
+              const text = chs.find(
+                (c) => c.type === "text" || c.type === "voice",
+              );
+              if (text) {
+                selectChannel(text);
+                resolve();
+              } else {
+                setTimeout(check, 100);
+              }
+            };
+            // Give up after 10 s and fall back to home
+            setTimeout(resolve, 10_000);
+            check();
+          });
 
-      await loadShortcodes();
-      requestNotificationPermission();
-
-      const pendingServer = sessionStorage.getItem("pendingServerJoin") ?? null;
-
-      if (pendingServer && pendingServer !== DM_SERVER_URL) {
-        sessionStorage.removeItem("pendingServerJoin");
-
-        const normalized = pendingServer.replace(/^wss?:\/\//, "");
-
-        // Add to server list if not already present
-        if (!servers.value.some((s) => s.url === normalized)) {
-          servers.value = [
-            ...servers.value,
-            { name: normalized, url: normalized, icon: null },
-          ];
-          const { saveServers } = await import("./lib/persistence");
-          await saveServers();
-        }
-
-        const connected = await switchServer(normalized);
-
-        if (connected) {
-          // switchServer lands on the first channel immediately if channels are
-          // already loaded, but for a fresh connection they arrive via the
-          // channels_get WS response shortly after. Poll until they appear.
-          const waitForChannel = () =>
-            new Promise<void>((resolve) => {
-              const check = () => {
-                const chs = channelsByServer.value[normalized] ?? [];
-                const text = chs.find(
-                  (c) => c.type === "text" || c.type === "voice",
-                );
-                if (text) {
-                  selectChannel(text);
-                  resolve();
-                } else {
-                  setTimeout(check, 100);
-                }
-              };
-              // Give up after 10 s and fall back to home
-              setTimeout(resolve, 10_000);
-              check();
-            });
-
-          await waitForChannel();
-          setIsLoading(false);
-          return;
-        }
-        // If connection failed fall through to the normal home landing
-      } else if (pendingServer) {
-        sessionStorage.removeItem("pendingServerJoin");
+        await waitForChannel();
+        setIsLoading(false);
+        return;
       }
+      // If connection failed fall through to the normal home landing
+    } else if (pendingServer) {
+      sessionStorage.removeItem("pendingServerJoin");
+    }
 
-      serverUrl.value = DM_SERVER_URL;
-      selectHomeChannel();
-      setIsLoading(false);
-    })();
+    serverUrl.value = DM_SERVER_URL;
+    selectHomeChannel();
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    boot();
   }, []);
 
   if (isLoading) return <div className="loading-screen">Loading...</div>;
+
+  if (isOffline.value) {
+    return <OfflineScreen onRetry={boot} />;
+  }
 
   const showNotes =
     currentChannel.value?.name === "notes" && serverUrl.value === DM_SERVER_URL;

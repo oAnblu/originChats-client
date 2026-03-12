@@ -37,6 +37,7 @@ import { openUserPopout } from "./UserPopout";
 import type { VoiceUser } from "../types";
 import { avatarUrl } from "../utils";
 import { updateStatus, clearStatus } from "../lib/rotur-api";
+import { saveNotifSettings } from "../lib/persistence";
 
 function isChannelUnread(
   channel: { name: string; last_message?: number },
@@ -110,6 +111,7 @@ export function ChannelList() {
           [channelKey]: level,
         };
       }
+      saveNotifSettings().catch(() => {});
     };
 
     showContextMenu(e, [
@@ -337,9 +339,7 @@ export function ChannelList() {
                 </span>
               )}
               {hasPing && (
-                <span className="ping-badge">
-                  {unreadPings.value[pingKey]}
-                </span>
+                <span className="ping-badge">{unreadPings.value[pingKey]}</span>
               )}
               {hasUnread && !hasPing && (
                 <span className="unread-indicator"></span>

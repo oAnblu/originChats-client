@@ -1730,6 +1730,9 @@ function NotificationsTab() {
                         [server.url]: v,
                       };
                     }
+                    import("../lib/persistence").then(({ saveNotifSettings }) =>
+                      saveNotifSettings().catch(() => {}),
+                    );
                   }}
                 >
                   <option value="all">All Messages</option>
@@ -1780,6 +1783,9 @@ function NotificationsTab() {
                         [key]: v,
                       };
                     }
+                    import("../lib/persistence").then(({ saveNotifSettings }) =>
+                      saveNotifSettings().catch(() => {}),
+                    );
                   }}
                 >
                   <option value="all">All Messages</option>
@@ -1793,6 +1799,9 @@ function NotificationsTab() {
                     const next = { ...channelNotifSettings.value };
                     delete next[key];
                     channelNotifSettings.value = next;
+                    import("../lib/persistence").then(({ saveNotifSettings }) =>
+                      saveNotifSettings().catch(() => {}),
+                    );
                   }}
                 >
                   <Icon name="X" size={14} />

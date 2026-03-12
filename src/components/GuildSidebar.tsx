@@ -12,10 +12,15 @@ import {
   unreadByChannel,
   DM_SERVER_URL,
   serverNotifSettings,
+  offlinePushServers,
   getChannelNotifLevel,
   type NotificationLevel,
 } from "../state";
-import { wsSend } from "../lib/websocket";
+import {
+  wsSend,
+  enablePushForServer,
+  disablePushForServer,
+} from "../lib/websocket";
 import {
   switchServer,
   markServerAsRead,
@@ -30,6 +35,7 @@ import {
 import { renderGuildSidebarSignal } from "../lib/ui-signals";
 import { Icon, ServerIcon } from "./Icon";
 import { avatarUrl, reloadServerIcon } from "../utils";
+import { saveNotifSettings } from "../lib/persistence";
 
 export function GuildSidebar() {
   useSignalEffect(() => {
@@ -102,6 +108,7 @@ export function GuildSidebar() {
     e.preventDefault();
     const currentLevel: NotificationLevel =
       serverNotifSettings.value[server.url] ?? "mentions";
+    const pushEnabled = offlinePushServers.value[server.url] ?? false;
 
     const setServerNotif = (level: NotificationLevel) => {
       if (level === "mentions") {
@@ -114,6 +121,7 @@ export function GuildSidebar() {
           [server.url]: level,
         };
       }
+      saveNotifSettings().catch(() => {});
     };
 
     showContextMenu(e, [
@@ -144,6 +152,17 @@ export function GuildSidebar() {
             fn: () => setServerNotif("none"),
           },
         ],
+      },
+      {
+        label: pushEnabled ? "Offline Push: On ✓" : "Offline Push: Off",
+        icon: pushEnabled ? "BellRing" : "BellOff",
+        fn: () => {
+          if (pushEnabled) {
+            disablePushForServer(server.url);
+          } else {
+            enablePushForServer(server.url);
+          }
+        },
       },
       { separator: true, label: "", fn: () => {} },
       {

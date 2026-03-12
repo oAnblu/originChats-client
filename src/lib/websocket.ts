@@ -34,6 +34,8 @@ import {
   pendingDMAddUsername,
   setPendingDMAddUsername,
   getChannelNotifLevel,
+  offlinePushServers,
+  pushSubscriptionsByServer,
 } from "../state";
 
 const DM_SERVER_URL = "dms.mistium.com";
@@ -167,6 +169,126 @@ export function requestNotificationPermission(): void {
   if ("Notification" in window && Notification.permission === "default") {
     Notification.requestPermission();
   }
+}
+
+// ── Web Push subscription management ─────────────────────────────────────────
+
+/**
+ * Enable offline push notifications for a server.
+ * Flow:
+ *   1. Request notification permission if needed.
+ *   2. Ask the server for its VAPID public key via `push_get_vapid`.
+ *   3. The server responds with `push_vapid` → `subscribeToPushForServer` is called.
+ */
+export async function enablePushForServer(sUrl: string): Promise<void> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    console.warn("[Push] Web Push not supported in this browser.");
+    return;
+  }
+
+  if (Notification.permission === "default") {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      console.warn("[Push] Notification permission denied.");
+      return;
+    }
+  }
+
+  if (Notification.permission !== "granted") {
+    console.warn("[Push] Notification permission not granted.");
+    return;
+  }
+
+  // Ask the server for its VAPID public key.
+  // The server will respond with a `push_vapid` message handled below.
+  wsSend({ cmd: "push_get_vapid" }, sUrl);
+}
+
+/**
+ * Called when the server responds with its VAPID public key.
+ * Subscribes via PushManager and sends the subscription back to the server.
+ */
+export async function subscribeToPushForServer(
+  sUrl: string,
+  vapidPublicKey: string,
+): Promise<void> {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+
+    // Unsubscribe any previous subscription first so we always get a fresh one
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) await existing.unsubscribe();
+
+    // Convert VAPID key from base64url to Uint8Array
+    const keyBytes = urlBase64ToUint8Array(vapidPublicKey);
+
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: keyBytes as unknown as ArrayBuffer,
+    });
+
+    const subJson = subscription.toJSON();
+    pushSubscriptionsByServer[sUrl] = subJson;
+
+    // Send subscription to the server
+    wsSend(
+      {
+        cmd: "push_subscribe",
+        subscription: subJson,
+        vapid_public_key: vapidPublicKey,
+      },
+      sUrl,
+    );
+
+    // Persist the opt-in flag
+    offlinePushServers.value = { ...offlinePushServers.value, [sUrl]: true };
+    console.log(`[Push] Subscribed to push notifications for ${sUrl}`);
+  } catch (err) {
+    console.error(`[Push] Failed to subscribe for ${sUrl}:`, err);
+  }
+}
+
+/**
+ * Disable offline push notifications for a server.
+ * Unsubscribes locally and notifies the server to remove the subscription.
+ */
+export async function disablePushForServer(sUrl: string): Promise<void> {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const subscription = await reg.pushManager.getSubscription();
+
+    if (subscription) {
+      // Tell the server to remove this endpoint
+      wsSend(
+        {
+          cmd: "push_unsubscribe",
+          endpoint: subscription.endpoint,
+        },
+        sUrl,
+      );
+      await subscription.unsubscribe();
+    }
+
+    delete pushSubscriptionsByServer[sUrl];
+    const next = { ...offlinePushServers.value };
+    delete next[sUrl];
+    offlinePushServers.value = next;
+    console.log(`[Push] Unsubscribed from push notifications for ${sUrl}`);
+  } catch (err) {
+    console.error(`[Push] Failed to unsubscribe for ${sUrl}:`, err);
+  }
+}
+
+/** Convert a base64url-encoded VAPID public key to a Uint8Array. */
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const arr = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) {
+    arr[i] = rawData.charCodeAt(i);
+  }
+  return arr;
 }
 
 const pingRegex = /@[\w-]+/gi;
@@ -731,6 +853,19 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
               [sUrl]: (serverPingsByServer.value[sUrl] || 0) + 1,
             };
             playPingSound();
+            const cleanContent = (msg.message.content || "").replace(
+              /<[^>]*>/g,
+              "",
+            );
+            const notifBody =
+              cleanContent.length > 100
+                ? cleanContent.substring(0, 100) + "..."
+                : cleanContent;
+            showNotification(
+              `${msg.message.user} in #${msg.channel}`,
+              notifBody,
+              msg.channel,
+            );
             if (serverUrl.value === sUrl) renderChannelsSignal.value++;
             renderGuildSidebarSignal.value++;
           }
@@ -1343,6 +1478,29 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       break;
     }
 
+    // ── Web Push responses ──────────────────────────────────────────────────
+    case "push_vapid": {
+      // Server sent its VAPID public key in response to push_get_vapid.
+      // Complete the subscription flow.
+      const vapidKey: string = msg.key || msg.vapid_key || msg.val;
+      if (vapidKey) {
+        subscribeToPushForServer(sUrl, vapidKey);
+      } else {
+        console.warn(`[Push] push_vapid from ${sUrl} had no key:`, msg);
+      }
+      break;
+    }
+    case "push_subscribed": {
+      if (msg.success === false) {
+        console.warn(`[Push] Server ${sUrl} rejected subscription.`);
+        // Roll back the opt-in flag
+        const next = { ...offlinePushServers.value };
+        delete next[sUrl];
+        offlinePushServers.value = next;
+      }
+      break;
+    }
+
     case "error":
     case "err": {
       // Server-sent error — surface as a dismissible error banner.
@@ -1353,6 +1511,19 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         msg.val || msg.message || msg.error || "The server reported an error.";
       if (/^unknown command/i.test(errText)) {
         console.debug(`[${sUrl}] Unsupported command (ignored):`, errText);
+        // If the server doesn't know push_get_vapid it doesn't support offline
+        // push notifications. Roll back the opt-in and tell the user.
+        if (/push_get_vapid/i.test(errText)) {
+          const next = { ...offlinePushServers.value };
+          delete next[sUrl];
+          offlinePushServers.value = next;
+          showBanner({
+            kind: "error",
+            serverUrl: sUrl,
+            message: "This server does not support offline push notifications.",
+            autoDismissMs: 8000,
+          });
+        }
         break;
       }
       // If a "dm add" is in flight and the DMS server says the user doesn't
