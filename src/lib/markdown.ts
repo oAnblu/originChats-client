@@ -114,6 +114,7 @@ export interface MentionContext {
   validUsernames: Set<string>; // lowercase
   validChannels: Set<string>; // lowercase
   validRoles?: Set<string>; // lowercase
+  roleColors?: Record<string, string>; // lowercase role name -> color
 }
 
 export function parseMarkdown(
@@ -183,14 +184,17 @@ export function parseMarkdown(
   text = text.replace(/\*(.+?)\*/g, (_, content) => `<em>${content}</em>`);
   text = text.replace(/_(.+?)_/g, (_, content) => `<em>${content}</em>`);
 
-  text = text.replace(/@&([a-zA-Z0-9_]+)/g, (match, roleName) => {
+  text = text.replace(/@&amp;([a-zA-Z0-9_]+)/g, (match, roleName) => {
+    console.log(mentionCtx, match, roleName);
     if (
       mentionCtx?.validRoles &&
       !mentionCtx.validRoles.has(roleName.toLowerCase())
     ) {
       return match;
     }
-    return `<span class="role-mention" data-role="${escapeAttribute(roleName)}">@${roleName}</span>`;
+    const color = mentionCtx?.roleColors?.[roleName.toLowerCase()];
+    const style = color ? ` style="--mention: ${color};"` : "";
+    return `<span class="role-mention" data-role="${escapeAttribute(roleName)}"${style}>@${roleName}</span>`;
   });
 
   text = text.replace(/@([a-zA-Z0-9_]+)/g, (match, user) => {

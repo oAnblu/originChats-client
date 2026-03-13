@@ -254,6 +254,7 @@ function RightPanelMessageCard({ msg }: { msg: any }) {
         <MessageContent
           content={msg.content}
           currentUsername={currentUser.value?.username}
+          authorUsername={msg.user}
         />
       </div>
       <div className="right-panel-message-action">
@@ -1713,6 +1714,7 @@ export function MessageArea() {
                       <MessageContent
                         content={msg.content}
                         currentUsername={currentUser.value?.username}
+                        authorUsername={msg.user}
                       />
                       {msg.edited && (
                         <span className="edited-indicator">(edited)</span>
@@ -1746,6 +1748,7 @@ export function MessageArea() {
                       <MessageContent
                         content={msg.content}
                         currentUsername={currentUser.value?.username}
+                        authorUsername={msg.user}
                       />
                       {msg.edited && (
                         <span className="edited-indicator">(edited)</span>
@@ -1761,6 +1764,7 @@ export function MessageArea() {
                 <MessageContent
                   content={msg.content}
                   currentUsername={currentUser.value?.username}
+                  authorUsername={msg.user}
                 />
                 {msg.edited && (
                   <span className="edited-indicator">(edited)</span>

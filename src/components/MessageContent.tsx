@@ -36,6 +36,7 @@ function hasImageExtension(url: string): boolean {
 interface MessageContentProps {
   content: string;
   currentUsername?: string;
+  authorUsername?: string;
 }
 
 const SINGLE_EMOJI_RE =
@@ -50,6 +51,7 @@ function isSingleEmoji(text: string): boolean {
 export function MessageContent({
   content,
   currentUsername,
+  authorUsername,
 }: MessageContentProps) {
   const [embeds, setEmbeds] = useState<EmbedInfo[]>([]);
   const [inlineImages, setInlineImages] = useState<string[]>([]);
@@ -57,6 +59,42 @@ export function MessageContent({
 
   const { html, embedLinks, isMentioned, isEmojiOnly } = useMemo(() => {
     const rolesMap = rolesByServer.value[serverUrl.value] || {};
+    const roleColors: Record<string, string> = {};
+    for (const [name, role] of Object.entries(rolesMap)) {
+      if (role.color) {
+        roleColors[name.toLowerCase()] = role.color;
+      }
+    }
+
+    // Compute which roles the message author is allowed to mention.
+    // mention_roles: true  → can mention any role
+    // mention_roles: string[] → can only mention those specific roles
+    // missing / false → cannot mention any role
+    const authorRoles =
+      (authorUsername
+        ? users.value[authorUsername.toLowerCase()]?.roles
+        : undefined) ?? [];
+
+    const mentionableRoles = new Set<string>();
+    for (const authorRole of authorRoles) {
+      const roleDef =
+        rolesMap[authorRole] ?? rolesMap[authorRole.toLowerCase()];
+      if (!roleDef) continue;
+      const perm = (roleDef.permissions as Record<string, any> | undefined)
+        ?.mention_roles;
+      if (perm === true) {
+        // Can mention every role — add all and stop early.
+        for (const r of Object.keys(rolesMap)) {
+          mentionableRoles.add(r.toLowerCase());
+        }
+        break;
+      } else if (Array.isArray(perm)) {
+        for (const r of perm) {
+          mentionableRoles.add((r as string).toLowerCase());
+        }
+      }
+    }
+
     const mentionCtx: MentionContext = {
       validUsernames: new Set(
         Object.keys(users.value).map((u) => u.toLowerCase()),
@@ -64,7 +102,8 @@ export function MessageContent({
       validChannels: new Set(
         channels.value.filter((c) => c.name).map((c) => c.name.toLowerCase()),
       ),
-      validRoles: new Set(Object.keys(rolesMap).map((r) => r.toLowerCase())),
+      validRoles: mentionableRoles,
+      roleColors,
     };
     const links: string[] = [];
     const parsed = parseMarkdown(content, links, mentionCtx);
@@ -77,6 +116,22 @@ export function MessageContent({
           (m) => m.trim().toLowerCase() === "@" + currentUsername.toLowerCase(),
         );
       }
+      if (!mentioned) {
+        const myRoles =
+          users.value[currentUsername.toLowerCase()]?.roles?.map((r) =>
+            r.toLowerCase(),
+          ) ?? [];
+        if (myRoles.length > 0) {
+          const rolePingRegex = /@&([\w-]+)/gi;
+          let m: RegExpExecArray | null;
+          while ((m = rolePingRegex.exec(content)) !== null) {
+            if (myRoles.includes(m[1].toLowerCase())) {
+              mentioned = true;
+              break;
+            }
+          }
+        }
+      }
     }
     return {
       html: DOMPurify.sanitize(parsed, { ADD_ATTR: ["target"] }),
@@ -84,7 +139,7 @@ export function MessageContent({
       isMentioned: mentioned,
       isEmojiOnly: isSingleEmoji(content),
     };
-  }, [content, currentUsername]);
+  }, [content, currentUsername, authorUsername]);
 
   const isTenorOnly = useMemo(
     () => isTenorOnlyMessage(embedLinks, content),

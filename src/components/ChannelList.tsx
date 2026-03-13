@@ -14,6 +14,7 @@ import {
   roturStatuses,
   channelNotifSettings,
   getChannelNotifLevel,
+  users,
   type NotificationLevel,
 } from "../state";
 import {
@@ -164,7 +165,26 @@ export function ChannelList() {
           <div className="channel-header-name">
             {isDM ? "Direct Messages" : currentServer.value?.name || "Server"}
           </div>
+          {!isDM && (
+            <div className="channel-header-member-count">
+              {Object.keys(users.value).length} members
+            </div>
+          )}
         </div>
+        {!isDM && (
+          <button
+            className="channel-header-share"
+            title="Copy invite link"
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.search = "";
+              url.searchParams.set("server", serverUrl.value);
+              navigator.clipboard.writeText(url.toString());
+            }}
+          >
+            <Icon name="Share2" size={16} />
+          </button>
+        )}
         {!isDM && (
           <button
             className="channel-header-settings"

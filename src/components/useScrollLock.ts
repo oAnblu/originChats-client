@@ -149,6 +149,14 @@ export function useScrollLock({
         // Older messages were prepended — hold the user's visual position
         el.scrollTop += heightAdded;
         pendingOlderLoad.current = false;
+        // If the compensated scroll position is still near the top, arm the
+        // debounce so the scroll event fired by the scrollTop adjustment above
+        // doesn't immediately re-trigger another load.
+        if (el.scrollTop <= 10 && loadOlderDebounce.current === null) {
+          loadOlderDebounce.current = window.setTimeout(() => {
+            loadOlderDebounce.current = null;
+          }, 300);
+        }
         stableOnOlderLoaded();
         return;
       }
