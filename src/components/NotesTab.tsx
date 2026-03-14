@@ -7,6 +7,7 @@ import { showContextMenu } from "../lib/ui-signals";
 import { MessageContent } from "./MessageContent";
 import { avatarUrl } from "../utils";
 import { useScrollLock } from "./useScrollLock";
+import { Header } from "./Header";
 
 interface NoteMessage {
   key: string;
@@ -195,12 +196,7 @@ export function NotesTab() {
 
   return (
     <div className="main-content-wrapper">
-      <div className="main-messages-header">
-        <div className="main-header-left">
-          <Icon name="FileText" size={24} />
-          <span className="main-header-channel-name">Notes</span>
-        </div>
-      </div>
+      <Header />
       <div className="main-content-area">
         <div className="messages-container">
           <div

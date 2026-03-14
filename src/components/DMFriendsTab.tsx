@@ -30,6 +30,7 @@ import {
 import { Icon } from "./Icon";
 import { avatarUrl } from "../utils";
 import type { RoturGroup } from "../types";
+import { Header } from "./Header";
 
 export function DMFriendsTab() {
   useSignalEffect(() => {
@@ -43,10 +44,7 @@ export function DMFriendsTab() {
 
   return (
     <div className="dm-friends-container">
-      <div className="dm-friends-header">
-        <Icon name="Users" size={22} />
-        <span>Friends</span>
-      </div>
+      <Header />
       <div className="dm-tabs">
         <button
           className={`dm-tab ${tab === "friends" ? "active" : ""}`}

@@ -7,6 +7,7 @@ import {
   switchServer,
 } from "../lib/actions";
 import { Icon } from "./Icon";
+import { Header } from "./Header";
 
 export function DMHomeTab() {
   useSignalEffect(() => {
@@ -15,10 +16,7 @@ export function DMHomeTab() {
 
   return (
     <div className="dm-home-container">
-      <div className="dm-home-header">
-        <Icon name="Home" size={22} />
-        <span>Home</span>
-      </div>
+      <Header />
       <div className="home-content">
         <div className="home-heading-icon">
           <Icon name="Home" size={64} />

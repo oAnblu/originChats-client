@@ -4,6 +4,7 @@ import { friends, currentUser } from "../state";
 import { Icon } from "./Icon";
 import { avatarUrl } from "../utils";
 import { openDMWith } from "../lib/actions";
+import { Header } from "./Header";
 
 export function NewMessageTab() {
   const [search, setSearch] = useState("");
@@ -23,10 +24,7 @@ export function NewMessageTab() {
 
   return (
     <div className="dm-home-container">
-      <div className="dm-home-header">
-        <Icon name="PenSquare" size={22} />
-        <span>New Message</span>
-      </div>
+      <Header />
       <div className="new-message-content">
         <div className="new-message-search">
           <label>To:</label>
