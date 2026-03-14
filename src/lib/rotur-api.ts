@@ -98,6 +98,9 @@ async function authPost<T>(
   params?: Record<string, string>,
   signal?: AbortSignal,
 ): Promise<T> {
+  if (body) {
+    body.auth = token;
+  }
   const res = await fetch(buildUrl(path, params, true), {
     method: "POST",
     headers: body ? { "Content-Type": "application/json" } : undefined,
