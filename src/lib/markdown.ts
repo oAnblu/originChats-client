@@ -140,20 +140,27 @@ export function parseMarkdown(
     return placeholder;
   });
 
-  // Escape raw HTML in the plain text portions (code blocks and spoilers
+  // Extract URLs BEFORE HTML escaping so & doesn't become &amp; in URLs
+  const urlPlaceholders: Array<{ placeholder: string; url: string }> = [];
+  text = text.replace(/(https?:\/\/[^\s"\'\]+[^\s"\'\']+)/g, (match, url) => {
+    const placeholder = `§URL_${urlPlaceholders.length}§${Math.random().toString(36).substring(2, 11)}§`;
+    urlPlaceholders.push({ placeholder, url });
+    return placeholder;
+  });
+
+  // Escape raw HTML in the plain text portions (code blocks, spoilers, and URLs
   // have already been extracted into placeholders and are escaped separately).
   text = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-  // Extract URLs early so they don't get affected by markdown parsing
-  const urlPlaceholders: Array<{ placeholder: string; url: string }> = [];
-  text = text.replace(/(https?:\/\/[^\s"\']+\.[^\s"\']+)/g, (match, url) => {
-    const placeholder = `§URL_${urlPlaceholders.length}§${Math.random().toString(36).substring(2, 11)}§`;
-    urlPlaceholders.push({ placeholder, url });
-    return placeholder;
-  });
+  // Escape raw HTML in the plain text portions (code blocks and spoilers
+  // have already been extracted into placeholders and are escaped separately).
+  text = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
   // Extract inline code early so markdown doesn't affect it
   const inlineCodeBlocks: Array<{ placeholder: string; code: string }> = [];

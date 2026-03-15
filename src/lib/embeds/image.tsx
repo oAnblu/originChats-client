@@ -1,13 +1,37 @@
 import { useState, useEffect } from "preact/hooks";
 import { proxyImageUrl } from "./utils";
+import {
+  getCachedImage,
+  getCachedImageSync,
+  scheduleCleanup,
+} from "../image-cache";
 
 export function ImageEmbed({ url }: { url: string }) {
-  const [isValid, setIsValid] = useState<boolean | null>(null);
+  const initialCached = getCachedImageSync(url);
+  const [isValid, setIsValid] = useState<boolean | null>(
+    initialCached ? true : null,
+  );
+  const [cachedSrc, setCachedSrc] = useState<string | null>(
+    () => initialCached,
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    const checkImage = async () => {
+    const checkAndCacheImage = async () => {
+      scheduleCleanup();
+
+      try {
+        const urlObj = new URL(url);
+        if (
+          urlObj.hostname === "localhost" ||
+          urlObj.hostname === "127.0.0.1"
+        ) {
+          setIsValid(false);
+          return;
+        }
+      } catch {}
+
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 5000);
@@ -22,7 +46,15 @@ export function ImageEmbed({ url }: { url: string }) {
 
         if (res.ok) {
           const ct = res.headers.get("Content-Type") || "";
-          setIsValid(ct.startsWith("image/"));
+          const isImage = ct.startsWith("image/");
+          setIsValid(isImage);
+
+          if (isImage && !getCachedImageSync(url)) {
+            const cached = await getCachedImage(url);
+            if (!cancelled && cached) {
+              setCachedSrc(cached);
+            }
+          }
         } else {
           setIsValid(false);
         }
@@ -31,7 +63,7 @@ export function ImageEmbed({ url }: { url: string }) {
       }
     };
 
-    checkImage();
+    checkAndCacheImage();
     return () => {
       cancelled = true;
     };
@@ -51,7 +83,7 @@ export function ImageEmbed({ url }: { url: string }) {
     <div className="embed-container image-embed">
       <div className="chat-image-wrapper">
         <img
-          src={proxyImageUrl(url)}
+          src={cachedSrc || proxyImageUrl(url)}
           alt="image"
           className="message-image"
           data-image-url={url}

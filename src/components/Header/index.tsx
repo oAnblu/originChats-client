@@ -3,8 +3,10 @@ import { useSignalEffect } from "@preact/signals";
 import {
   currentServer,
   currentChannel,
-  serverPingsByServer,
   unreadByChannel,
+  unreadPings,
+  getServerPingCount,
+  getServerUnreadCount,
   DM_SERVER_URL,
   dmServers,
   serverUrl,
@@ -13,6 +15,7 @@ import {
   pingsInboxMessages,
   pingsInboxOffset,
   PINGS_INBOX_LIMIT,
+  servers,
 } from "../../state";
 import { Icon } from "../Icon";
 import {
@@ -34,7 +37,7 @@ export function Header() {
   const [, forceUpdate] = useReducer((n) => n + 1, 0);
   useSignalEffect(() => {
     currentChannel.value;
-    serverPingsByServer.value;
+    unreadPings.value;
     unreadByChannel.value;
     serverUrl.value;
     showVoiceCallView.value;
@@ -53,8 +56,8 @@ export function Header() {
   const canSearch = caps.includes("messages_search");
   const canInbox = caps.includes("pings_get");
 
-  const serverPingTotal = Object.values(serverPingsByServer.value).reduce(
-    (a, b) => a + b,
+  const serverPingTotal = servers.value.reduce(
+    (sum, s) => sum + getServerPingCount(s.url),
     0,
   );
   const dmPingTotal = dmServers.value.reduce(

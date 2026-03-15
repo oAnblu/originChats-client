@@ -68,7 +68,58 @@ export const unreadPings = signal<Record<string, number>>({});
 export const typingUsersByServer = signal<
   Record<string, Record<string, Map<string, number>>>
 >({});
-export const serverPingsByServer = signal<Record<string, number>>({});
+
+export function getServerPingCount(sUrl: string): number {
+  return Object.entries(unreadPings.value)
+    .filter(([key]) => key.startsWith(`${sUrl}:`))
+    .reduce((sum, [, count]) => sum + count, 0);
+}
+
+export function getServerUnreadCount(sUrl: string): number {
+  return Object.entries(unreadByChannel.value)
+    .filter(([key]) => key.startsWith(`${sUrl}:`))
+    .reduce((sum, [, count]) => sum + count, 0);
+}
+
+export function getChannelPingCount(sUrl: string, channelName: string): number {
+  return unreadPings.value[`${sUrl}:${channelName}`] || 0;
+}
+
+export function getChannelUnreadCount(
+  sUrl: string,
+  channelName: string,
+): number {
+  return unreadByChannel.value[`${sUrl}:${channelName}`] || 0;
+}
+
+export function clearChannelPings(sUrl: string, channelName: string): void {
+  const key = `${sUrl}:${channelName}`;
+  if (unreadPings.value[key] !== undefined) {
+    const newPings = { ...unreadPings.value };
+    delete newPings[key];
+    unreadPings.value = newPings;
+  }
+  if (unreadByChannel.value[key] !== undefined) {
+    const newUnreads = { ...unreadByChannel.value };
+    delete newUnreads[key];
+    unreadByChannel.value = newUnreads;
+  }
+}
+
+export function clearServerPings(sUrl: string): void {
+  const newPings = { ...unreadPings.value };
+  const newUnreads = { ...unreadByChannel.value };
+
+  Object.keys(newPings).forEach((key) => {
+    if (key.startsWith(`${sUrl}:`)) delete newPings[key];
+  });
+  Object.keys(newUnreads).forEach((key) => {
+    if (key.startsWith(`${sUrl}:`)) delete newUnreads[key];
+  });
+
+  unreadPings.value = newPings;
+  unreadByChannel.value = newUnreads;
+}
 
 export interface PingMessage {
   id: string;

@@ -61,6 +61,7 @@ import { UnifiedPicker } from "./UnifiedPicker";
 import { uploadImage, getEnabledMediaServer } from "../lib/media-uploader";
 import { MessageContent } from "./MessageContent";
 import { MessageGroupRow } from "./MessageGroupRow";
+import { MessageActionButtons } from "./MessageActionButtons";
 import { openUserPopout } from "./UserPopout";
 import { UserProfileCard } from "./UserProfile";
 import { InputAutocomplete, useInputAutocomplete } from "./InputAutocomplete";
@@ -74,6 +75,7 @@ import { createGift, ROTUR_GIFT_URL } from "../lib/rotur-api";
 import { VoiceCallView } from "./VoiceCallView";
 import { CallButton } from "./buttons/CallButton";
 import { Header } from "./Header";
+import { startChannelLoad, isChannelLoading } from "../lib/image-cache";
 
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -980,6 +982,7 @@ function SwipeableMessage({
 export function MessageArea() {
   const lastChannelRef = useRef<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [channelLoading, setChannelLoading] = useState(false);
   const {
     containerRef: messagesContainerRef,
     showScrollBtn,
@@ -1183,6 +1186,38 @@ export function MessageArea() {
     if (isChannelSwitch) {
       setLoadingOlder(false);
       resetForChannel();
+
+      // Start loading images for the new channel
+      const ch = currentChannel.value;
+      if (ch && !SPECIAL_CHANNELS.has(ch.name)) {
+        const msgs =
+          currentChannel.value?.type === "thread" && currentThread.value
+            ? messages.value[currentThread.value.id] || []
+            : messages.value[ch.name] || [];
+
+        if (msgs.length > 0) {
+          const imageUrls: string[] = [];
+          msgs.forEach((msg) => {
+            if (msg.content) {
+              const urlMatch = msg.content.match(
+                /https?:\/\/[^\s<>"']+\.(?:jpg|jpeg|png|gif|webp|avif)/gi,
+              );
+              if (urlMatch) imageUrls.push(...urlMatch);
+            }
+          });
+
+          if (imageUrls.length > 0) {
+            const channelId =
+              ch.type === "thread" && currentThread.value
+                ? currentThread.value.id
+                : ch.name;
+            setChannelLoading(true);
+            startChannelLoad(channelId, imageUrls).then(() => {
+              setChannelLoading(false);
+            });
+          }
+        }
+      }
     }
   });
 
@@ -1761,6 +1796,20 @@ export function MessageArea() {
             data-msg-id={msg.id}
             onContextMenu={(e: any) => handleMessageContextMenu(e, msg)}
           >
+            <MessageActionButtons
+              message={msg}
+              onReply={() => startReply(msg)}
+              onReact={(emoji) => handleReaction(msg, emoji)}
+              onOpenEmojiPicker={() => {
+                setReactingToMessage(msg);
+                setPickerTab("emoji");
+                setShowPicker(true);
+              }}
+              onContextMenu={(e) => handleMessageContextMenu(e as any, msg)}
+              canReact={canReact}
+              canReply={canReply}
+              isOwn={isOwn}
+            />
             {replyTo && canReply && (
               <div
                 className="message-reply"
@@ -2008,6 +2057,11 @@ export function MessageArea() {
           onDragOver={handleDragOver as any}
           onDrop={handleDrop as any}
         >
+          {channelLoading && currentMessages.length > 0 && (
+            <div className="channel-loading-overlay">
+              <div className="loading-throbber" />
+            </div>
+          )}
           <div
             id="messages"
             ref={messagesContainerRef}

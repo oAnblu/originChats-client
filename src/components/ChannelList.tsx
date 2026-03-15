@@ -16,6 +16,8 @@ import {
   roturStatuses,
   channelNotifSettings,
   getChannelNotifLevel,
+  getChannelPingCount,
+  getChannelUnreadCount,
   users,
   type NotificationLevel,
 } from "../state";
@@ -282,12 +284,17 @@ export function ChannelList() {
             channel.name,
           );
           const isMuted = notifLevel === "none";
+          const pingCount = isMuted
+            ? 0
+            : getChannelPingCount(serverUrl.value, channel.name);
+          const unreadCount = isMuted
+            ? 0
+            : getChannelUnreadCount(serverUrl.value, channel.name);
           const hasUnread =
             !isMuted &&
-            (isChannelUnread(channel, serverUrl.value) ||
-              unreadByChannel.value[`${serverUrl.value}:${channel.name}`] > 0);
-          const pingKey = `${serverUrl.value}:${channel.name}`;
-          const hasPing = unreadPings.value[pingKey] > 0;
+            (isChannelUnread(channel, serverUrl.value) || unreadCount > 0);
+          const displayPingCount = isDM ? unreadCount : pingCount;
+          const hasPing = displayPingCount > 0;
 
           const voiceUsers: VoiceUser[] = (channel as any).voice_state || [];
 
@@ -372,11 +379,12 @@ export function ChannelList() {
                 </div>
                 {recentThreads.map((thread: any) => {
                   const threadPingKey = `${serverUrl.value}:thread:${thread.id}`;
-                  const threadUnreadKey = threadPingKey;
-                  const threadHasPing = unreadPings.value[threadPingKey] > 0;
+                  const threadPingCount = unreadPings.value[threadPingKey] || 0;
+                  const threadUnreadCount =
+                    unreadByChannel.value[threadPingKey] || 0;
+                  const threadHasPing = threadPingCount > 0;
                   const threadHasUnread =
-                    !threadHasPing &&
-                    unreadByChannel.value[threadUnreadKey] > 0;
+                    !threadHasPing && threadUnreadCount > 0;
 
                   return (
                     <div
@@ -400,9 +408,7 @@ export function ChannelList() {
                         </span>
                       )}
                       {threadHasPing && (
-                        <span className="ping-badge">
-                          {unreadPings.value[threadPingKey]}
-                        </span>
+                        <span className="ping-badge">{threadPingCount}</span>
                       )}
                       {threadHasUnread && (
                         <span className="unread-indicator"></span>
@@ -444,7 +450,7 @@ export function ChannelList() {
                 </span>
               )}
               {hasPing && (
-                <span className="ping-badge">{unreadPings.value[pingKey]}</span>
+                <span className="ping-badge">{displayPingCount}</span>
               )}
               {hasUnread && !hasPing && (
                 <span className="unread-indicator"></span>

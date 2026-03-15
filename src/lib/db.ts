@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = "originchats";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = [
   "settings",

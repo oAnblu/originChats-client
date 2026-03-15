@@ -118,6 +118,13 @@ export async function detectEmbedType(url: string) {
   }
 
   try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname === "localhost" || urlObj.hostname === "127.0.0.1") {
+      return { type: "unknown", url };
+    }
+  } catch {}
+
+  try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(url, {

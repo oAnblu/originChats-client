@@ -6432,6 +6432,112 @@ a {
   opacity: 1;
 }
 
+.message-action-buttons {
+  align-items: center;
+  background: var(--surface, #0a0a0c);
+  border-radius: 12px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  padding: 4px;
+  position: absolute;
+  right: 8px;
+  top: -12px;
+  transition: opacity var(--anim-fast) var(--ease-standard);
+  z-index: 5;
+  box-shadow: var(--shadow-1);
+}
+
+.message-group:hover .message-action-buttons,
+.message-single:hover .message-action-buttons {
+  opacity: 1;
+}
+
+.message-action-buttons .action-btn {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  outline: none;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  width: 28px;
+}
+
+.message-action-buttons .action-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.quick-reactions-wrapper {
+  position: relative;
+}
+
+.quick-reactions-popup {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-2);
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  margin-top: 4px;
+}
+
+.quick-reaction-btn {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  font-size: 18px;
+  height: 32px;
+  justify-content: center;
+  padding: 4px;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+  width: 32px;
+}
+
+.quick-reaction-btn:hover {
+  background: var(--surface-hover);
+  transform: scale(1.15);
+}
+
+.quick-reaction-more {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  height: 32px;
+  justify-content: center;
+  padding: 4px;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+  width: 32px;
+}
+
+.quick-reaction-more:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
 .message-group,
 .message-single {
   position: relative;
@@ -6961,6 +7067,29 @@ pre {
 .older-messages-loader .loading-throbber::after {
   height: 24px;
   width: 24px;
+}
+
+.channel-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--background-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.channel-loading-overlay .loading-throbber {
+  height: 48px;
+  width: 48px;
+}
+
+.channel-loading-overlay .loading-throbber::after {
+  height: 48px;
+  width: 48px;
 }
 
 .loading-throbber {

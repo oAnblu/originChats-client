@@ -19,7 +19,6 @@ import {
   serversAttempted,
   unreadByChannel,
   unreadPings,
-  serverPingsByServer,
   rolesByServer,
   slashCommandsByServer,
   dmServers,
@@ -461,10 +460,6 @@ export function clearServerState(sUrl: string): void {
 
   readTimesByServer.value = Object.fromEntries(
     Object.entries(readTimesByServer.value).filter(([key]) => key !== sUrl),
-  );
-
-  serverPingsByServer.value = Object.fromEntries(
-    Object.entries(serverPingsByServer.value).filter(([key]) => key !== sUrl),
   );
 
   renderChannelsSignal.value++;
@@ -1086,10 +1081,6 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
               [pingKeyToIncrement]:
                 (unreadPings.value[pingKeyToIncrement] || 0) + 1,
             };
-            serverPingsByServer.value = {
-              ...serverPingsByServer.value,
-              [sUrl]: (serverPingsByServer.value[sUrl] || 0) + 1,
-            };
             playPingSound();
             const cleanContent = (msgNew.message.content || "").replace(
               /<[^>]*>/g,
@@ -1141,6 +1132,13 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
             [msgNew.channel]: msgTimestamp,
           },
         };
+
+        const keyToClear = isThreadMessage ? threadKey! : channelKey;
+        if (unreadByChannel.value[keyToClear]) {
+          const newUnreads = { ...unreadByChannel.value };
+          delete newUnreads[keyToClear];
+          unreadByChannel.value = newUnreads;
+        }
 
         if (_readTimeFlushTimers[channelKey]) {
           clearTimeout(_readTimeFlushTimers[channelKey]);
@@ -1225,10 +1223,6 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
             notifBody,
             msg.channel,
           );
-          serverPingsByServer.value = {
-            ...serverPingsByServer.value,
-            [sUrl]: (serverPingsByServer.value[sUrl] || 0) + 1,
-          };
           renderGuildSidebarSignal.value++;
         } else if (isRolePinged) {
           if (!isCurrentView) {
@@ -1255,10 +1249,6 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
             notifBody,
             msg.channel,
           );
-          serverPingsByServer.value = {
-            ...serverPingsByServer.value,
-            [sUrl]: (serverPingsByServer.value[sUrl] || 0) + 1,
-          };
           renderGuildSidebarSignal.value++;
         } else if (isReplyPinged) {
           if (!isCurrentView) {
@@ -1566,10 +1556,6 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       }
       if (totalNew > 0) {
         unreadPings.value = mergedPings;
-        serverPingsByServer.value = {
-          ...serverPingsByServer.value,
-          [sUrl]: (serverPingsByServer.value[sUrl] || 0) + totalNew,
-        };
         renderChannelsSignal.value++;
         renderGuildSidebarSignal.value++;
       }

@@ -7,8 +7,10 @@ import {
   currentUser,
   wsStatus,
   readTimesByServer,
-  serverPingsByServer,
   unreadByChannel,
+  unreadPings,
+  getServerPingCount,
+  getServerUnreadCount,
   DM_SERVER_URL,
   serverNotifSettings,
   getChannelNotifLevel,
@@ -248,16 +250,10 @@ export function GuildSidebar() {
         <div className="guild-divider"></div>
         {servers.value.map((server, index) => {
           const serverMuted = serverNotifSettings.value[server.url] === "none";
-          const hasUnread =
-            !serverMuted &&
-            Object.keys(unreadByChannel.value).some(
-              (key) =>
-                key.startsWith(`${server.url}:`) &&
-                (unreadByChannel.value[key] ?? 0) > 0,
-            );
-          const pingCount = serverMuted
+          const unreadCount = serverMuted
             ? 0
-            : serverPingsByServer.value[server.url] || 0;
+            : getServerUnreadCount(server.url);
+          const pingCount = serverMuted ? 0 : getServerPingCount(server.url);
           const isDragOver = dragOverIndex === index;
           return (
             <div
@@ -278,7 +274,7 @@ export function GuildSidebar() {
                 <ServerIcon server={server} />
               </div>
               <div className="guild-pill"></div>
-              {hasUnread && !pingCount && (
+              {unreadCount > 0 && pingCount === 0 && (
                 <div className="guild-unread-dot"></div>
               )}
               {pingCount > 0 && (

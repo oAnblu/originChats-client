@@ -10,6 +10,11 @@ import {
 import { Embed } from "../lib/embeds/index";
 import type { EmbedInfo } from "../lib/embeds/types";
 import { users, channels, rolesByServer, serverUrl } from "../state";
+import {
+  getCachedImage,
+  getCachedImageSync,
+  scheduleCleanup,
+} from "../lib/image-cache";
 
 const IMAGE_EXTENSIONS = [
   "jpg",
@@ -122,7 +127,11 @@ export function MessageContent({
       mentioned =
         (pings.users || []).some(
           (u) => u.toLowerCase() === currentUsernameLower,
-        ) || mentionedRolesLower.some((r) => myRolesLower.has(r));
+        ) ||
+        mentionedRolesLower.some((r) => myRolesLower.has(r)) ||
+        (pings.replies || []).some(
+          (r) => r.toLowerCase() === currentUsernameLower,
+        );
     }
     return {
       html: DOMPurify.sanitize(parsed, { ADD_ATTR: ["target"] }),
@@ -176,6 +185,7 @@ export function MessageContent({
 
   useEffect(() => {
     if (!messageTextRef.current) return;
+    scheduleCleanup();
 
     const messageText = messageTextRef.current;
     const placeholders = messageText.querySelectorAll<HTMLDivElement>(
@@ -193,13 +203,22 @@ export function MessageContent({
       placeholder.dataset.processed = "true";
 
       const img = document.createElement("img");
-      img.src = proxyImageUrl(url);
       img.alt = "image";
       img.className = "message-image";
       img.dataset.imageUrl = url;
       img.loading = "lazy";
+      const syncCached = getCachedImageSync(url);
+      img.src = syncCached || proxyImageUrl(url);
 
       placeholder.appendChild(img);
+
+      if (!syncCached) {
+        getCachedImage(url).then((cached) => {
+          if (cached && img.parentNode) {
+            img.src = cached;
+          }
+        });
+      }
     });
 
     const potentialLinks =
@@ -222,15 +241,25 @@ export function MessageContent({
       wrapper.className = "chat-image-wrapper";
 
       const img = document.createElement("img");
-      img.src = proxyImageUrl(url);
       img.alt = "image";
       img.className = "message-image";
       img.dataset.imageUrl = url;
+      img.loading = "lazy";
+      const syncCached = getCachedImageSync(url);
+      img.src = syncCached || proxyImageUrl(url);
 
       wrapper.appendChild(img);
       link.textContent = "";
       link.appendChild(wrapper);
       link.classList.remove("potential-image");
+
+      if (!syncCached) {
+        getCachedImage(url).then((cached) => {
+          if (cached && img.parentNode) {
+            img.src = cached;
+          }
+        });
+      }
     });
   }, [html, inlineImages]);
 

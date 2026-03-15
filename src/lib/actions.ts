@@ -15,7 +15,6 @@ import {
   wsStatus,
   usersByServer,
   currentUserByServer,
-  serverPingsByServer,
   threadsByServer,
   lastChannelByServer,
   DM_SERVER_URL,
@@ -23,7 +22,10 @@ import {
   setPendingDMAddUsername,
   blockedUsers,
   friends,
+  dmServers,
   friendRequests,
+  clearChannelPings,
+  clearServerPings,
 } from "../state";
 import {
   renderGuildSidebarSignal,
@@ -199,25 +201,7 @@ export function markChannelAsRead(channelName: string): void {
     },
   };
 
-  if (unreadByChannel.value[`${sUrl}:${channelName}`]) {
-    const newUnreads = { ...unreadByChannel.value };
-    delete newUnreads[`${sUrl}:${channelName}`];
-    unreadByChannel.value = newUnreads;
-  }
-
-  const pingKey = `${sUrl}:${channelName}`;
-  if (unreadPings.value[pingKey]) {
-    const pingCount = unreadPings.value[pingKey];
-    const newPings = { ...unreadPings.value };
-    delete newPings[pingKey];
-    unreadPings.value = newPings;
-
-    const currentServerPings = serverPingsByServer.value[sUrl] || 0;
-    serverPingsByServer.value = {
-      ...serverPingsByServer.value,
-      [sUrl]: Math.max(0, currentServerPings - pingCount),
-    };
-  }
+  clearChannelPings(sUrl, channelName);
 
   try {
     dbReadTimes.set(sUrl, readTimesByServer.value[sUrl] || {});
@@ -228,9 +212,6 @@ export function markChannelAsRead(channelName: string): void {
   saveReadTimes().catch((e) =>
     console.warn("[markChannelAsRead] Failed to sync read times to cloud:", e),
   );
-
-  renderChannelsSignal.value++;
-  renderGuildSidebarSignal.value++;
 }
 
 export function markServerAsRead(sUrl: string): void {
@@ -249,26 +230,7 @@ export function markServerAsRead(sUrl: string): void {
 
   readTimesByServer.value = newReadTimes;
 
-  const newUnreads = { ...unreadByChannel.value };
-  const newPings = { ...unreadPings.value };
-
-  Object.keys(newUnreads).forEach((key) => {
-    if (key.startsWith(`${sUrl}:`)) {
-      delete newUnreads[key];
-    }
-  });
-
-  serverChannels.forEach((channel) => {
-    delete newPings[`${sUrl}:${channel.name}`];
-  });
-
-  unreadByChannel.value = newUnreads;
-  unreadPings.value = newPings;
-
-  serverPingsByServer.value = {
-    ...serverPingsByServer.value,
-    [sUrl]: 0,
-  };
+  clearServerPings(sUrl);
 
   try {
     dbReadTimes.set(sUrl, readTimesByServer.value[sUrl] || {});
@@ -279,9 +241,6 @@ export function markServerAsRead(sUrl: string): void {
   saveReadTimes().catch((e) =>
     console.warn("[markServerAsRead] Failed to sync read times to cloud:", e),
   );
-
-  renderChannelsSignal.value++;
-  renderGuildSidebarSignal.value++;
 }
 
 export function removeServer(sUrl: string): void {
@@ -526,16 +485,9 @@ export function selectThread(
       unreadByChannel.value = newUnreads;
     }
     if (unreadPings.value[threadKey]) {
-      const pingCount = unreadPings.value[threadKey];
       const newPings = { ...unreadPings.value };
       delete newPings[threadKey];
       unreadPings.value = newPings;
-
-      const currentServerPings = serverPingsByServer.value[sUrl] || 0;
-      serverPingsByServer.value = {
-        ...serverPingsByServer.value,
-        [sUrl]: Math.max(0, currentServerPings - pingCount),
-      };
     }
 
     // Fetch thread messages

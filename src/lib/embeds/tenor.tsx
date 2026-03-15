@@ -1,5 +1,10 @@
 import { useState, useEffect } from "preact/hooks";
 import { proxyImageUrl } from "./utils";
+import {
+  getCachedImage,
+  getCachedImageSync,
+  scheduleCleanup,
+} from "../image-cache";
 
 interface TenorEmbedProps {
   tenorId: string;
@@ -8,10 +13,12 @@ interface TenorEmbedProps {
 
 export function TenorEmbed({ tenorId }: TenorEmbedProps) {
   const [gifUrl, setGifUrl] = useState("");
+  const [cachedSrc, setCachedSrc] = useState<string | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    scheduleCleanup();
 
     fetch(`https://apps.mistium.com/tenor/get?id=${tenorId}`)
       .then((res) => {
@@ -26,6 +33,17 @@ export function TenorEmbed({ tenorId }: TenorEmbedProps) {
           media.mediumgif?.url || media.gif?.url || media.tinygif?.url;
         if (!url) throw new Error("No GIF URL found");
         setGifUrl(url);
+
+        const syncCached = getCachedImageSync(url);
+        if (syncCached) {
+          setCachedSrc(syncCached);
+        } else {
+          getCachedImage(url).then((cached) => {
+            if (!cancelled && cached) {
+              setCachedSrc(cached);
+            }
+          });
+        }
       })
       .catch(() => {
         if (!cancelled) setError(true);
@@ -49,7 +67,7 @@ export function TenorEmbed({ tenorId }: TenorEmbedProps) {
     <div className="embed-container tenor-embed">
       <div className="chat-image-wrapper">
         <img
-          src={proxyImageUrl(gifUrl)}
+          src={cachedSrc || proxyImageUrl(gifUrl)}
           alt="Tenor GIF"
           className="tenor-gif message-image"
           data-image-url={gifUrl}
