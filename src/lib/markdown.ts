@@ -140,7 +140,15 @@ export function parseMarkdown(
     return placeholder;
   });
 
-  // Extract URLs BEFORE HTML escaping so & doesn't become &amp; in URLs
+  // Extract inline code before HTML escaping so special chars display correctly
+  const inlineCodeBlocks: Array<{ placeholder: string; code: string }> = [];
+  text = text.replace(/`([^`]+)`/g, (match, code) => {
+    const placeholder = `§INLINECODE_${inlineCodeBlocks.length}§${Math.random().toString(36).substring(2, 11)}§`;
+    inlineCodeBlocks.push({ placeholder, code });
+    return placeholder;
+  });
+
+  // Extract URLs before HTML escaping so & doesn't become &amp; in URLs
   const urlPlaceholders: Array<{ placeholder: string; url: string }> = [];
   text = text.replace(/(https?:\/\/[^\s"\'\]+[^\s"\'\']+)/g, (match, url) => {
     const placeholder = `§URL_${urlPlaceholders.length}§${Math.random().toString(36).substring(2, 11)}§`;
@@ -148,27 +156,11 @@ export function parseMarkdown(
     return placeholder;
   });
 
-  // Escape raw HTML in the plain text portions (code blocks, spoilers, and URLs
-  // have already been extracted into placeholders and are escaped separately).
+  // Escape raw HTML in the remaining plain text portions
   text = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-
-  // Escape raw HTML in the plain text portions (code blocks and spoilers
-  // have already been extracted into placeholders and are escaped separately).
-  text = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  // Extract inline code early so markdown doesn't affect it
-  const inlineCodeBlocks: Array<{ placeholder: string; code: string }> = [];
-  text = text.replace(/`([^`]+)`/g, (match, code) => {
-    const placeholder = `§INLINECODE_${inlineCodeBlocks.length}§${Math.random().toString(36).substring(2, 11)}§`;
-    inlineCodeBlocks.push({ placeholder, code });
-    return placeholder;
-  });
 
   text = text.replace(/^#{6} (.*)$/gm, (_, content) => `<h6>${content}</h6>`);
   text = text.replace(/^#{5} (.*)$/gm, (_, content) => `<h5>${content}</h5>`);
@@ -209,9 +201,13 @@ export function parseMarkdown(
     (_, prefix, content) => `${prefix}<em>${content}</em>`,
   );
 
-  // Restore inline code
+  // Restore inline code with proper escaping
   for (const { placeholder, code } of inlineCodeBlocks) {
-    text = text.replace(placeholder, `<code>${code}</code>`);
+    const escapedCode = code
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    text = text.replace(placeholder, `<code>${escapedCode}</code>`);
   }
 
   // Restore URLs and process them
