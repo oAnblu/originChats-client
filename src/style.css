@@ -4033,8 +4033,13 @@ a {
   flex-direction: column;
   overflow-y: auto;
   padding: var(--space-2);
-  width: 340px;
-  position: relative;
+}
+
+@media (min-width: 769px) {
+  .channels {
+    position: relative;
+    width: 340px;
+  }
 }
 
 .channel-list-resize-handle {
