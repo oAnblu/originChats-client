@@ -1304,7 +1304,7 @@ export function MessageArea() {
             id: editingMessage.id,
             channel: currentChannel.value?.name,
             ...(isThread && { thread_id: currentThread.value?.id }),
-            content: input.value.trim(),
+            content: replaceShortcodes(input.value.trim()),
           });
           setEditingMessage(null);
           input.value = "";
