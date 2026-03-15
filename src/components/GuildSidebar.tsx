@@ -1,21 +1,18 @@
 import { useState, useRef } from "preact/hooks";
 import {
   serverUrl,
-  currentChannel,
   servers,
+  serverFolders,
   dmServers,
-  currentUser,
   wsStatus,
-  readTimesByServer,
   unreadByChannel,
-  unreadPings,
   getServerPingCount,
   getServerUnreadCount,
   DM_SERVER_URL,
   serverNotifSettings,
-  getChannelNotifLevel,
   type NotificationLevel,
 } from "../state";
+import type { ServerFolder } from "../types";
 import { wsSend } from "../lib/websocket";
 import {
   switchServer,
@@ -27,76 +24,144 @@ import {
   showDiscoveryModal,
   mobileSidebarOpen,
   showContextMenu,
+  renderGuildSidebarSignal,
 } from "../lib/ui-signals";
-import { renderGuildSidebarSignal } from "../lib/ui-signals";
 import { Icon, ServerIcon } from "./Icon";
 import { avatarUrl, reloadServerIcon } from "../utils";
-import { saveNotifSettings } from "../lib/persistence";
+import { saveNotifSettings, saveFolders } from "../lib/persistence";
+
+const ITEM_HEIGHT = 48;
+const DRAG_THRESHOLD = 30;
 
 export function GuildSidebar() {
-  // Reading the signal directly in the render body ensures Preact re-renders
-  // this component whenever renderGuildSidebarSignal changes (e.g. wsStatus
-  // updates). useSignalEffect only runs a side-effect and does not cause a
-  // re-render on its own.
   void renderGuildSidebarSignal.value;
 
-  const dragIndexRef = useRef<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const didDragRef = useRef(false);
-
-  const handleHomeClick = async () => {
-    if (serverUrl.value !== DM_SERVER_URL) {
-      await switchServer(DM_SERVER_URL);
-    }
-  };
+  const [drag, setDrag] = useState<{
+    index: number;
+    url: string;
+    y: number;
+    dropIndex: number;
+    listTop: number;
+    serverListOffset: number;
+  } | null>(null);
+  const [isDropping, setIsDropping] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<typeof drag>(null);
 
   const getConnectionClass = (url: string) => {
     const status = wsStatus[url];
-    switch (status) {
-      case "connecting":
-        return "server-connecting";
-      case "connected":
-        return "";
-      case "disconnected":
-      case "error":
-        return "server-disconnected";
-      default:
-        return "";
-    }
+    if (status === "connecting") return "server-connecting";
+    if (status === "disconnected" || status === "error")
+      return "server-disconnected";
+    return "";
   };
 
-  const handleDragStart = (index: number) => {
-    dragIndexRef.current = index;
-    didDragRef.current = false;
-  };
-
-  const handleDragOver = (e: DragEvent, index: number) => {
+  const handleServerMouseDown = (index: number, url: string, e: MouseEvent) => {
     e.preventDefault();
-    didDragRef.current = true;
-    setDragOverIndex(index);
-  };
+    if (!listRef.current) return;
 
-  const handleDrop = async (index: number) => {
-    const from = dragIndexRef.current;
-    if (from === null || from === index) {
-      setDragOverIndex(null);
-      return;
-    }
-    const reordered = [...servers.value];
-    const [moved] = reordered.splice(from, 1);
-    reordered.splice(index, 0, moved);
-    servers.value = reordered;
-    dragIndexRef.current = null;
-    setDragOverIndex(null);
-    try {
-      const { saveServers } = await import("../lib/persistence");
-      await saveServers();
-    } catch {}
-  };
+    const rect = listRef.current.getBoundingClientRect();
+    const dmCount = dmServers.value.filter((dm) => {
+      const unread =
+        unreadByChannel.value[`${DM_SERVER_URL}:${dm.channel}`] || 0;
+      return unread > 0;
+    }).length;
+    const serverListOffset = 1 + dmCount + 1; // home + dms + divider
 
-  const handleDragEnd = () => {
-    dragIndexRef.current = null;
-    setDragOverIndex(null);
+    const startY = e.clientY;
+    let hasDragged = false;
+
+    const onMove = (moveEvent: MouseEvent) => {
+      if (
+        !hasDragged &&
+        Math.abs(moveEvent.clientY - startY) > DRAG_THRESHOLD
+      ) {
+        hasDragged = true;
+        const initialDrag = {
+          index,
+          url,
+          y: moveEvent.clientY,
+          dropIndex: index,
+          listTop: rect.top,
+          serverListOffset,
+        };
+        setDrag(initialDrag);
+        dragRef.current = initialDrag;
+      }
+      if (!hasDragged) return;
+
+      const relativeY = moveEvent.clientY - rect.top;
+      const adjustedY = relativeY - serverListOffset * ITEM_HEIGHT - 4;
+      const newDropIndex = Math.max(0, Math.floor(adjustedY / ITEM_HEIGHT));
+      const newDrag = {
+        index,
+        url,
+        y: moveEvent.clientY,
+        dropIndex: newDropIndex,
+        listTop: rect.top,
+        serverListOffset,
+      };
+      setDrag(newDrag);
+      dragRef.current = newDrag;
+    };
+
+    const onUp = async () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+
+      if (!hasDragged) {
+        switchServer(url);
+        return;
+      }
+
+      const currentDrag = dragRef.current;
+      const from = currentDrag?.index;
+      const to = currentDrag?.dropIndex;
+
+      if (from == null || to == null || from === to) {
+        setDrag(null);
+        dragRef.current = null;
+        return;
+      }
+
+      setIsDropping(true);
+      setTimeout(async () => {
+        const serversNotInFolders = servers.value.filter(
+          (s) => !serverFolders.value.some((f) => f.serverUrls.includes(s.url)),
+        );
+
+        const reordered = [...serversNotInFolders];
+        const [moved] = reordered.splice(from, 1);
+        reordered.splice(to, 0, moved);
+
+        const newOrder = reordered.map((s) => s.url);
+        const updatedServers = [...servers.value].sort((a, b) => {
+          const aInFolder = serverFolders.value.some((f) =>
+            f.serverUrls.includes(a.url),
+          );
+          const bInFolder = serverFolders.value.some((f) =>
+            f.serverUrls.includes(b.url),
+          );
+          if (aInFolder !== bInFolder) return aInFolder ? 1 : -1;
+          if (!aInFolder && !bInFolder)
+            return newOrder.indexOf(a.url) - newOrder.indexOf(b.url);
+          return 0;
+        });
+
+        servers.value = updatedServers;
+        setDrag(null);
+        dragRef.current = null;
+        setIsDropping(false);
+
+        try {
+          const { saveServers } = await import("../lib/persistence");
+          await saveServers();
+        } catch {}
+      }, 150);
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
   };
 
   const handleServerContextMenu = (
@@ -106,6 +171,9 @@ export function GuildSidebar() {
     e.preventDefault();
     const currentLevel: NotificationLevel =
       serverNotifSettings.value[server.url] ?? "mentions";
+    const folderContainingServer = serverFolders.value.find((f) =>
+      f.serverUrls.includes(server.url),
+    );
 
     const setServerNotif = (level: NotificationLevel) => {
       if (level === "mentions") {
@@ -121,67 +189,87 @@ export function GuildSidebar() {
       saveNotifSettings().catch(() => {});
     };
 
-    showContextMenu(e, [
-      {
-        label: "Mark as Read",
-        icon: "CheckCircle",
-        fn: () => markServerAsRead(server.url),
-      },
-      { separator: true, label: "", fn: () => {} },
-      {
-        label: "Notifications",
-        icon: "Bell",
-        fn: () => {},
-        children: [
-          {
-            label: `All Messages${currentLevel === "all" ? " ✓" : ""}`,
-            icon: "Bell",
-            fn: () => setServerNotif("all"),
-          },
-          {
-            label: `Mentions Only${currentLevel === "mentions" ? " ✓" : ""}`,
-            icon: "BellDot",
-            fn: () => setServerNotif("mentions"),
-          },
-          {
-            label: `Mute Server${currentLevel === "none" ? " ✓" : ""}`,
-            icon: "BellOff",
-            fn: () => setServerNotif("none"),
-          },
-        ],
-      },
-      { separator: true, label: "", fn: () => {} },
-      {
-        label: "Reload Icon",
-        icon: "RefreshCw",
-        fn: () => reloadServerIcon(server.url),
-      },
-      { separator: true, label: "", fn: () => {} },
-      {
-        label: "Copy URL",
-        icon: "Copy",
-        fn: () => {
-          navigator.clipboard.writeText(server.url);
+    showContextMenu(
+      e,
+      [
+        {
+          label: "Mark as Read",
+          icon: "CheckCircle",
+          fn: () => markServerAsRead(server.url),
         },
-      },
-      { separator: true, label: "", fn: () => {} },
-      {
-        label: "Leave Server",
-        icon: "LogOut",
-        danger: true,
-        fn: () => {
-          wsSend({ cmd: "user_leave" }, server.url);
-          if (confirm("Leave this server?")) {
-            removeServer(server.url);
-          }
+        folderContainingServer
+          ? {
+              label: "Remove from Folder",
+              icon: "FolderMinus",
+              fn: () => {
+                serverFolders.value = serverFolders.value
+                  .map((f) =>
+                    f.id === folderContainingServer.id
+                      ? {
+                          ...f,
+                          serverUrls: f.serverUrls.filter(
+                            (u) => u !== server.url,
+                          ),
+                        }
+                      : f,
+                  )
+                  .filter((f) => f.serverUrls.length > 0);
+                saveFolders().catch(() => {});
+              },
+            }
+          : null,
+        { separator: true, label: "", fn: () => {} },
+        {
+          label: "Notifications",
+          icon: "Bell",
+          fn: () => {},
+          children: [
+            {
+              label: `All Messages${currentLevel === "all" ? " ✓" : ""}`,
+              icon: "Bell",
+              fn: () => setServerNotif("all"),
+            },
+            {
+              label: `Mentions Only${currentLevel === "mentions" ? " ✓" : ""}`,
+              icon: "BellDot",
+              fn: () => setServerNotif("mentions"),
+            },
+            {
+              label: `Mute Server${currentLevel === "none" ? " ✓" : ""}`,
+              icon: "BellOff",
+              fn: () => setServerNotif("none"),
+            },
+          ],
         },
-      },
-    ]);
+        { separator: true, label: "", fn: () => {} },
+        {
+          label: "Reload Icon",
+          icon: "RefreshCw",
+          fn: () => reloadServerIcon(server.url),
+        },
+        { separator: true, label: "", fn: () => {} },
+        {
+          label: "Copy URL",
+          icon: "Copy",
+          fn: () => navigator.clipboard.writeText(server.url),
+        },
+        { separator: true, label: "", fn: () => {} },
+        {
+          label: "Leave Server",
+          icon: "LogOut",
+          danger: true,
+          fn: () => {
+            wsSend({ cmd: "user_leave" }, server.url);
+            if (confirm("Leave this server?")) removeServer(server.url);
+          },
+        },
+      ].filter(Boolean) as any[],
+    );
   };
 
   const handleDMContextMenu = (
     e: MouseEvent,
-    dmServer: { channel: string; username: string; name: string },
+    dm: { channel: string; username: string },
   ) => {
     e.preventDefault();
     showContextMenu(e, [
@@ -194,96 +282,276 @@ export function GuildSidebar() {
       {
         label: "Copy Username",
         icon: "Copy",
+        fn: () => navigator.clipboard.writeText(dm.username),
+      },
+    ]);
+  };
+
+  const handleFolderContextMenu = (e: MouseEvent, folder: ServerFolder) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const colors = [
+      { hex: "#5865f2", name: "Blurple" },
+      { hex: "#3ba55c", name: "Green" },
+      { hex: "#faa61a", name: "Yellow" },
+      { hex: "#eb459e", name: "Pink" },
+      { hex: "#ed4245", name: "Red" },
+      { hex: "#9b59b6", name: "Purple" },
+      { hex: "#1abc9c", name: "Teal" },
+      { hex: "#e91e63", name: "Magenta" },
+      { hex: "#00bcd4", name: "Cyan" },
+      { hex: "#ff5722", name: "Orange" },
+      { hex: "#795548", name: "Brown" },
+      { hex: "#607d8b", name: "Grey" },
+    ];
+
+    showContextMenu(e, [
+      {
+        label: "Rename Folder",
+        icon: "Edit3",
         fn: () => {
-          navigator.clipboard.writeText(dmServer.username);
+          const newName = prompt("Enter folder name:", folder.name);
+          if (newName?.trim()) {
+            serverFolders.value = serverFolders.value.map((f) =>
+              f.id === folder.id ? { ...f, name: newName.trim() } : f,
+            );
+            saveFolders().catch(() => {});
+          }
+        },
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Folder Color",
+        icon: "Palette",
+        fn: () => {},
+        children: colors.map((c) => ({
+          label: `${c.hex === (folder.color || "") ? "✓ " : ""}${c.name}`,
+          icon: "Circle",
+          iconColor: c.hex,
+          fn: () => {
+            serverFolders.value = serverFolders.value.map((f) =>
+              f.id === folder.id ? { ...f, color: c.hex } : f,
+            );
+            saveFolders().catch(() => {});
+          },
+        })),
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Clear Color",
+        icon: "X",
+        fn: () => {
+          serverFolders.value = serverFolders.value.map((f) =>
+            f.id === folder.id ? { ...f, color: undefined } : f,
+          );
+          saveFolders().catch(() => {});
+        },
+      },
+      { separator: true, label: "", fn: () => {} },
+      {
+        label: "Delete Folder",
+        icon: "Trash2",
+        danger: true,
+        fn: () => {
+          serverFolders.value = serverFolders.value.filter(
+            (f) => f.id !== folder.id,
+          );
+          saveFolders().catch(() => {});
         },
       },
     ]);
   };
 
+  const serversNotInFolders = servers.value.filter(
+    (s) => !serverFolders.value.some((f) => f.serverUrls.includes(s.url)),
+  );
+  const isDragging = drag !== null;
+  const fromIdx = drag?.index;
+  const toIdx = drag?.dropIndex;
+
   return (
     <div className={`guild-sidebar${mobileSidebarOpen.value ? " open" : ""}`}>
-      <div className="guild-list">
+      <div className="guild-list" ref={listRef}>
         <div
           className={`guild-item home-guild ${serverUrl.value === DM_SERVER_URL ? "active" : ""} ${getConnectionClass(DM_SERVER_URL)}`}
-          onClick={handleHomeClick}
+          onClick={() => switchServer(DM_SERVER_URL)}
         >
           <div className="guild-icon">
             <Icon name="MessageCircle" size={24} />
           </div>
-          <div className="guild-pill"></div>
-          {(() => {
-            const totalDMUnread = dmServers.value.reduce(
-              (sum, dm) =>
-                sum +
-                (unreadByChannel.value[`${DM_SERVER_URL}:${dm.channel}`] || 0),
-              0,
-            );
-            return totalDMUnread > 0 ? (
-              <div className="guild-ping-badge">{totalDMUnread}</div>
-            ) : null;
-          })()}
+          <div className="guild-pill" />
         </div>
+
         {dmServers.value
           .filter((dm) => {
-            const readTime =
-              readTimesByServer.value[DM_SERVER_URL]?.[dm.channel] || 0;
-            const lastMsg = dm.last_message || 0;
-            return lastMsg > readTime;
+            const unread =
+              unreadByChannel.value[`${DM_SERVER_URL}:${dm.channel}`] || 0;
+            return unread > 0;
           })
-          .map((dmServer) => {
+          .map((dm) => {
+            const unread =
+              unreadByChannel.value[`${DM_SERVER_URL}:${dm.channel}`] || 0;
             return (
               <div
-                key={dmServer.channel}
-                className={`guild-item dm-server`}
-                onClick={() => openDMWith(dmServer.username)}
-                onContextMenu={(e: any) => handleDMContextMenu(e, dmServer)}
+                key={dm.channel}
+                className="guild-item dm-server"
+                onClick={() => openDMWith(dm.username)}
+                onContextMenu={(e) => handleDMContextMenu(e, dm)}
               >
                 <div className="guild-icon">
-                  <img src={avatarUrl(dmServer.username)} alt={dmServer.name} />
+                  <img src={avatarUrl(dm.username)} alt={dm.name} />
                 </div>
-                <div className="guild-pill"></div>
-                <div className="guild-unread-dot"></div>
+                <div className="guild-pill" />
+                {unread > 0 ? (
+                  <div className="guild-ping-badge">{unread}</div>
+                ) : (
+                  <div className="guild-unread-dot" />
+                )}
               </div>
             );
           })}
-        <div className="guild-divider"></div>
-        {servers.value.map((server, index) => {
-          const serverMuted = serverNotifSettings.value[server.url] === "none";
-          const unreadCount = serverMuted
-            ? 0
-            : getServerUnreadCount(server.url);
-          const pingCount = serverMuted ? 0 : getServerPingCount(server.url);
-          const isDragOver = dragOverIndex === index;
+
+        <div className="guild-divider" />
+
+        {serverFolders.value.map((folder) => {
+          const folderServers = servers.value.filter((s) =>
+            folder.serverUrls.includes(s.url),
+          );
+          const isCollapsed = folder.collapsed !== false;
+          const pings = folderServers.reduce(
+            (sum, s) =>
+              sum +
+              (serverNotifSettings.value[s.url] === "none"
+                ? 0
+                : getServerPingCount(s.url)),
+            0,
+          );
+          const unreads = folderServers.reduce(
+            (sum, s) =>
+              sum +
+              (serverNotifSettings.value[s.url] === "none"
+                ? 0
+                : getServerUnreadCount(s.url)),
+            0,
+          );
+          const hasActive = folderServers.some(
+            (s) => serverUrl.value === s.url,
+          );
+
+          return (
+            <>
+              <div
+                key={folder.id}
+                className={`guild-item folder-item ${hasActive ? "active" : ""}`}
+                onClick={() => {
+                  serverFolders.value = serverFolders.value.map((f) =>
+                    f.id === folder.id ? { ...f, collapsed: !isCollapsed } : f,
+                  );
+                  saveFolders().catch(() => {});
+                }}
+                onContextMenu={(e) => handleFolderContextMenu(e, folder)}
+              >
+                <div
+                  className="folder-icon"
+                  style={folder.color ? { backgroundColor: folder.color } : {}}
+                >
+                  <Icon
+                    name={isCollapsed ? "Folder" : "FolderOpen"}
+                    size={20}
+                  />
+                </div>
+                <div className="guild-pill" />
+                {unreads > 0 && pings === 0 && (
+                  <div className="guild-unread-dot" />
+                )}
+                {pings > 0 && <div className="guild-ping-badge">{pings}</div>}
+              </div>
+              {!isCollapsed && (
+                <div className="folder-servers">
+                  {folderServers.map((server) => {
+                    const muted =
+                      serverNotifSettings.value[server.url] === "none";
+                    const unreads = muted
+                      ? 0
+                      : getServerUnreadCount(server.url);
+                    const pings = muted ? 0 : getServerPingCount(server.url);
+                    return (
+                      <div
+                        key={server.url}
+                        className={`guild-item folder-server ${serverUrl.value === server.url ? "active" : ""} ${getConnectionClass(server.url)}`}
+                        onClick={() => switchServer(server.url)}
+                        onContextMenu={(e) =>
+                          handleServerContextMenu(e, server)
+                        }
+                      >
+                        <div className="guild-icon">
+                          <ServerIcon server={server} />
+                        </div>
+                        <div className="guild-pill" />
+                        {unreads > 0 && pings === 0 && (
+                          <div className="guild-unread-dot" />
+                        )}
+                        {pings > 0 && (
+                          <div className="guild-ping-badge">{pings}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          );
+        })}
+
+        {serversNotInFolders.map((server, index) => {
+          const muted = serverNotifSettings.value[server.url] === "none";
+          const unreads = muted ? 0 : getServerUnreadCount(server.url);
+          const pings = muted ? 0 : getServerPingCount(server.url);
+          const isBeingDragged =
+            fromIdx === index && (isDragging || isDropping);
+
+          let shiftStyle: any;
+          if (
+            fromIdx != null &&
+            toIdx != null &&
+            fromIdx !== toIdx &&
+            !isBeingDragged
+          ) {
+            if (fromIdx < toIdx && index > fromIdx && index <= toIdx)
+              shiftStyle = {
+                transform: "translateY(-48px)",
+                transition: "transform 0.15s ease",
+              };
+            else if (fromIdx > toIdx && index >= toIdx && index < fromIdx)
+              shiftStyle = {
+                transform: "translateY(48px)",
+                transition: "transform 0.15s ease",
+              };
+          }
+
           return (
             <div
               key={server.url}
-              draggable
-              className={`guild-item ${serverUrl.value === server.url ? "active" : ""} ${getConnectionClass(server.url)}${isDragOver ? " drag-over" : ""}`}
-              onClick={() => {
-                if (!didDragRef.current) switchServer(server.url);
-                didDragRef.current = false;
-              }}
-              onContextMenu={(e: any) => handleServerContextMenu(e, server)}
-              onDragStart={() => handleDragStart(index)}
-              onDragOver={(e: any) => handleDragOver(e, index)}
-              onDrop={() => handleDrop(index)}
-              onDragEnd={handleDragEnd}
+              className={`guild-item server ${serverUrl.value === server.url ? "active" : ""} ${getConnectionClass(server.url)}`}
+              style={isBeingDragged ? { visibility: "hidden" } : shiftStyle}
+              onMouseDown={(e) => handleServerMouseDown(index, server.url, e)}
+              onContextMenu={(e) => handleServerContextMenu(e, server)}
             >
               <div className="guild-icon">
                 <ServerIcon server={server} />
               </div>
-              <div className="guild-pill"></div>
-              {unreadCount > 0 && pingCount === 0 && (
-                <div className="guild-unread-dot"></div>
+              <div className="guild-pill" />
+              {unreads > 0 && pings === 0 && (
+                <div className="guild-unread-dot" />
               )}
-              {pingCount > 0 && (
-                <div className="guild-ping-badge">{pingCount}</div>
-              )}
+              {pings > 0 && <div className="guild-ping-badge">{pings}</div>}
             </div>
           );
         })}
-        <div className="guild-divider"></div>
+
+        <div className="guild-divider" />
+
         <div
           className="guild-item add-guild"
           onClick={() => (showDiscoveryModal.value = true)}
@@ -292,6 +560,31 @@ export function GuildSidebar() {
             <Icon name="Plus" size={24} />
           </div>
         </div>
+
+        {(isDragging || isDropping) && drag && (
+          <div
+            className="guild-item dragging"
+            style={{
+              position: "fixed",
+              left: 12,
+              top: isDragging
+                ? drag.y - 24
+                : drag.listTop +
+                  (drag.serverListOffset || 0) * ITEM_HEIGHT +
+                  (drag.dropIndex ?? 0) * ITEM_HEIGHT +
+                  4,
+              pointerEvents: "none",
+              zIndex: 1000,
+              transition: isDropping ? "top 0.15s ease" : undefined,
+            }}
+          >
+            <div className="guild-icon">
+              <ServerIcon
+                server={servers.value.find((s) => s.url === drag.url)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

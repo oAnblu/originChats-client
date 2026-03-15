@@ -1,7 +1,5 @@
-import { useState, useRef, useEffect } from "preact/hooks";
 import { Icon } from "./Icon";
 import type { Message } from "../types";
-import { showContextMenu } from "../lib/ui-signals";
 
 const QUICK_REACTIONS = ["👍", "👎", "😄", "❤️"];
 
@@ -26,21 +24,6 @@ export function MessageActionButtons({
   canReply,
   isOwn,
 }: MessageActionButtonsProps) {
-  const [showQuickReactions, setShowQuickReactions] = useState(false);
-  const reactBtnRef = useRef<HTMLButtonElement>(null);
-  const quickRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showQuickReactions) return;
-    const onClick = (e: MouseEvent) => {
-      if (quickRef.current && !quickRef.current.contains(e.target as Node)) {
-        setShowQuickReactions(false);
-      }
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [showQuickReactions]);
-
   const handleMoreClick = (e: MouseEvent) => {
     e.stopPropagation();
     onContextMenu(e);
@@ -48,48 +31,30 @@ export function MessageActionButtons({
 
   return (
     <div className="message-action-buttons">
-      {canReact && (
-        <div className="quick-reactions-wrapper" ref={quickRef}>
+      {canReact &&
+        QUICK_REACTIONS.map((emoji) => (
           <button
-            ref={reactBtnRef}
-            className="action-btn"
-            title="React"
+            key={emoji}
+            className="action-btn quick-reaction"
             onClick={(e) => {
               e.stopPropagation();
-              setShowQuickReactions((v) => !v);
+              onReact(emoji);
             }}
           >
-            <Icon name="Smile" size={16} />
+            {emoji}
           </button>
-          {showQuickReactions && (
-            <div className="quick-reactions-popup">
-              {QUICK_REACTIONS.map((emoji) => (
-                <button
-                  key={emoji}
-                  className="quick-reaction-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onReact(emoji);
-                    setShowQuickReactions(false);
-                  }}
-                >
-                  {emoji}
-                </button>
-              ))}
-              <button
-                className="quick-reaction-more"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowQuickReactions(false);
-                  onOpenEmojiPicker();
-                }}
-                title="More reactions"
-              >
-                <Icon name="SmilePlus" size={16} />
-              </button>
-            </div>
-          )}
-        </div>
+        ))}
+      {canReact && (
+        <button
+          className="action-btn"
+          title="React"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenEmojiPicker();
+          }}
+        >
+          <Icon name="SmilePlus" size={16} />
+        </button>
       )}
       {canReply && (
         <button

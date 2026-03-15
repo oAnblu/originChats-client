@@ -2175,6 +2175,7 @@ p {
 }
 
 .message-text {
+  display: inline;
   font-size: var(--message-font-size, 15px);
   line-height: 1.5;
   word-wrap: break-word;
@@ -2185,6 +2186,7 @@ p {
   user-select: text;
   white-space: pre-wrap;
   word-break: break-word;
+  cursor: text;
 }
 
 .message-text p {
@@ -2659,6 +2661,16 @@ a {
 
 #message-input:focus {
   outline: none;
+}
+
+#message-input.disabled-input {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+#message-input.disabled-input::placeholder {
+  color: var(--text-dim);
+  opacity: 0.6;
 }
 
 .input-toolbar-right {
@@ -4022,6 +4034,27 @@ a {
   overflow-y: auto;
   padding: var(--space-2);
   width: 340px;
+  position: relative;
+}
+
+.channel-list-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.channel-list-resize-handle:hover {
+  background: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .channel-list-resize-handle {
+    display: none;
+  }
 }
 
 .channels-list {
@@ -4316,9 +4349,9 @@ a {
 }
 
 .emoji {
-  height: var(--size-icon-lg);
+  height: var(--size-icon-md);
   vertical-align: middle;
-  width: var(--size-icon-lg);
+  width: var(--size-icon-md);
 }
 
 .context-menu-item {
@@ -7452,20 +7485,19 @@ pre {
   color: white;
 }
 
-.guild-item.dragging {
-  cursor: grabbing;
-  opacity: 0.5;
-}
-
 .guild-item.drag-over {
-  transform: scale(1.1);
-  transition: transform var(--anim-fast) var(--ease-standard);
+  position: relative;
 }
 
-.guild-item.drag-over .guild-icon {
+.guild-item.drag-over::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: -1px;
+  height: 2px;
   background: var(--primary);
-  border-radius: var(--radius-md);
-  box-shadow: 0 0 var(--space-2) rgba(155, 135, 245, 0.5);
+  border-radius: 1px;
 }
 
 .guild-divider {
@@ -7530,6 +7562,81 @@ pre {
 
 .add-guild:hover .guild-icon svg {
   color: var(--success);
+}
+
+.add-folder .guild-icon {
+  background: var(--surface-light);
+  border: 2px dashed var(--text-dim);
+}
+
+.add-folder .guild-icon svg {
+  color: var(--primary);
+}
+
+.add-folder:hover .guild-icon {
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  border-color: var(--primary);
+}
+
+.add-folder:hover .guild-icon svg {
+  color: var(--primary);
+}
+
+.folder-item {
+  position: relative;
+}
+
+.folder-icon {
+  align-items: center;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+  background: var(--surface);
+  border-radius: var(--radius-pill);
+  transition:
+    border-radius var(--anim-normal) var(--ease-standard),
+    background-color var(--anim-normal) var(--ease-standard);
+}
+
+.folder-icon svg {
+  color: var(--text);
+}
+
+.folder-item:hover .folder-icon {
+  border-radius: var(--radius-md);
+}
+
+.folder-item.active .folder-icon {
+  border-radius: var(--radius-md);
+}
+
+.folder-item.active .folder-icon svg {
+  color: #fff;
+}
+
+.folder-servers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.folder-server {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto;
+}
+
+.folder-server .guild-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.drag-over-folder .folder-icon {
+  background: var(--primary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 8px rgba(155, 135, 245, 0.5);
 }
 
 .user-sidebar {
@@ -12940,6 +13047,124 @@ body,
 
 .status-modal-btn.primary:hover:not(:disabled) {
   opacity: 0.85;
+}
+
+/* ── Loading screen ───────────────────────────────────────────────────────── */
+
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  gap: var(--space-8);
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.loading-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  animation: pulse-logo 2s ease-in-out infinite;
+}
+
+@keyframes pulse-logo {
+  0%,
+  100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+.loading-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--text-dim);
+}
+
+.loading-status svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-tip {
+  position: absolute;
+  bottom: 48px;
+  max-width: 480px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+  padding: 0 var(--space-4);
+}
+
+.tip-label {
+  color: var(--mention);
+  font-weight: 600;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+}
+
+.spinner-ring {
+  width: 100%;
+  height: 100%;
+  border: 4px solid var(--surface-light);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 /* ── Offline screen ──────────────────────────────────────────────────────── */

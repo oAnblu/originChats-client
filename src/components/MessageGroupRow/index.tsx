@@ -55,7 +55,8 @@ export function MessageGroupRow({
             }}
             onClick={(e: any) => openUserPopout(e, group.head.user)}
           >
-            {group.head.user}
+            {users.value[group.head.user?.toLowerCase()]?.nickname ||
+              group.head.user}
           </span>
           <span className="timestamp">
             {formatRelativeTime(group.head.timestamp)}

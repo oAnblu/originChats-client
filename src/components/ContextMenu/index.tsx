@@ -7,6 +7,7 @@ import "./ContextMenu.css";
 export interface ContextMenuItem {
   label: string;
   icon?: string;
+  iconColor?: string;
   danger?: boolean;
   separator?: boolean;
   fn: (event?: Event) => void;
@@ -115,7 +116,14 @@ function SubMenuPanel({
               }
             }}
           >
-            {item.icon && <Icon name={item.icon as any} size={16} />}
+            {item.icon && (
+              <Icon
+                name={item.icon as any}
+                size={16}
+                color={item.iconColor}
+                fill={item.iconColor ? "currentColor" : undefined}
+              />
+            )}
             <span>{item.label}</span>
             {hasChildren && (
               <span className="context-menu-arrow">
@@ -248,7 +256,14 @@ export function ContextMenu({
                 }
               }}
             >
-              {item.icon && <Icon name={item.icon as any} size={16} />}
+              {item.icon && (
+                <Icon
+                  name={item.icon as any}
+                  size={16}
+                  color={item.iconColor}
+                  fill={item.iconColor ? "currentColor" : undefined}
+                />
+              )}
               <span>{item.label}</span>
               {hasChildren && (
                 <span className="context-menu-arrow">

@@ -1,4 +1,5 @@
 import hljs from "highlight.js/lib/core";
+import { servers, threadsByServer } from "../state";
 import javascript from "highlight.js/lib/languages/javascript";
 import typescript from "highlight.js/lib/languages/typescript";
 import python from "highlight.js/lib/languages/python";
@@ -102,12 +103,33 @@ function proxyImageUrl(url: string): string {
 }
 
 export function replaceShortcodes(text: string): string {
-  if (!shortcodeMap) return text;
-  return text.replace(/:[\w][^:\n]*?:/g, (match) => {
-    if (shortcodeMap[match]) return shortcodeMap[match];
-    const trimmed = `:${match.slice(1, -1).trim()}:`;
-    return shortcodeMap[trimmed] || match;
+  if (shortcodeMap) {
+    text = text.replace(/:[\w][^:\n]*?:/g, (match) => {
+      if (shortcodeMap[match]) return shortcodeMap[match];
+      const trimmed = `:${match.slice(1, -1).trim()}:`;
+      return shortcodeMap[trimmed] || match;
+    });
+  }
+  return text;
+}
+
+export function convertChannelMentionsToLinks(
+  text: string,
+  currentServerUrl: string,
+): string {
+  text = text.replace(
+    /https:\/\/originchats\.mistium\.com\/app\/([^/\s?#]+)(?:\/([^/\s?#]+)(?:\/([a-f0-9-]+))?)?/gi,
+    (_, server, channel, thread) => {
+      let result = `originChats://${server}`;
+      if (channel) result += `/${channel}`;
+      if (thread) result += `/${thread}`;
+      return result;
+    },
+  );
+  text = text.replace(/#([a-zA-Z0-9_-]+)/g, (_, channelName) => {
+    return `originChats://${currentServerUrl}/${channelName}`;
   });
+  return text;
 }
 
 export interface MentionContext {
@@ -115,6 +137,7 @@ export interface MentionContext {
   validChannels: Set<string>; // lowercase
   validRoles?: Set<string>; // lowercase
   roleColors?: Record<string, string>; // lowercase role name -> color
+  currentServerUrl?: string; // for detecting cross-server channel links
 }
 
 export function parseMarkdown(
@@ -150,9 +173,23 @@ export function parseMarkdown(
 
   // Extract URLs before HTML escaping so & doesn't become &amp; in URLs
   const urlPlaceholders: Array<{ placeholder: string; url: string }> = [];
-  text = text.replace(/(https?:\/\/[^\s"\'\]+[^\s"\'\']+)/g, (match, url) => {
-    const placeholder = `§URL_${urlPlaceholders.length}§${Math.random().toString(36).substring(2, 11)}§`;
-    urlPlaceholders.push({ placeholder, url });
+  text = text.replace(
+    /((?:https?|origin[cC]hats):\/\/[^\s"'\\]+[^\s"']+)/g,
+    (match, url) => {
+      const placeholder = `§URL_${urlPlaceholders.length}§${Math.random().toString(36).substring(2, 11)}§`;
+      urlPlaceholders.push({ placeholder, url });
+      return placeholder;
+    },
+  );
+
+  // Extract blockquotes before HTML escaping so > is preserved
+  const blockquotePlaceholders: Array<{
+    placeholder: string;
+    content: string;
+  }> = [];
+  text = text.replace(/^(> )(.*)$/gm, (match, prefix, content) => {
+    const placeholder = `§BLOCKQUOTE_${blockquotePlaceholders.length}§${Math.random().toString(36).substring(2, 11)}§`;
+    blockquotePlaceholders.push({ placeholder, content });
     return placeholder;
   });
 
@@ -169,10 +206,13 @@ export function parseMarkdown(
   text = text.replace(/^## (.*)$/gm, (_, content) => `<h2>${content}</h2>`);
   text = text.replace(/^# (.*)$/gm, (_, content) => `<h1>${content}</h1>`);
 
-  text = text.replace(
-    /^> (.*)$/gm,
-    (_, content) => `<blockquote>${content}</blockquote>`,
-  );
+  // Restore blockquotes
+  for (const { placeholder, content } of blockquotePlaceholders) {
+    text = text.replace(
+      placeholder,
+      `<blockquote>${content.replace(/^>+\s*/, "")}</blockquote>`,
+    );
+  }
 
   text = text.replace(
     /\*\*\*(.+?)\*\*\*/g,
@@ -216,6 +256,50 @@ export function parseMarkdown(
     embedLinks.push(rawUrl);
     const safeUrl = escapeAttribute(rawUrl);
     const safeDisplayText = escapeHtml(rawUrl);
+
+    const originChatsMatch = rawUrl.match(
+      /^(?:https:\/\/originchats\.mistium\.com\/app\/|origin[cC]hats:\/\/)([^/\s?#]+)(?:\/([^/\s?#]+)(?:\/([a-f0-9-]+))?)?$/i,
+    );
+    if (originChatsMatch) {
+      const linkServerUrl = originChatsMatch[1];
+      const linkChannelName = originChatsMatch[2];
+      const linkThreadId = originChatsMatch[3];
+      const currentServer = mentionCtx?.currentServerUrl;
+      const isCurrentServer = currentServer && linkServerUrl === currentServer;
+      const server = servers.value.find((s) => s.url === linkServerUrl);
+      const serverDisplay = server?.name || linkServerUrl;
+
+      if (linkThreadId) {
+        const allThreads = threadsByServer.value[linkServerUrl] || {};
+        let threadName: string | null = null;
+        for (const channelThreads of Object.values(allThreads)) {
+          const thread = channelThreads.find((t) => t.id === linkThreadId);
+          if (thread) {
+            threadName = thread.name;
+            break;
+          }
+        }
+        const displayText = isCurrentServer
+          ? threadName || "unknown thread"
+          : `${serverDisplay}: ${threadName || "unknown thread"}`;
+        text = text.replace(
+          placeholder,
+          `<span class="channel-mention" data-channel="${escapeAttribute(linkChannelName || "")}" data-server="${escapeAttribute(linkServerUrl)}" data-thread="${escapeAttribute(linkThreadId)}">${escapeHtml(displayText)}</span>`,
+        );
+        continue;
+      }
+
+      if (linkChannelName) {
+        const displayText = isCurrentServer
+          ? `#${linkChannelName}`
+          : `${serverDisplay}: #${linkChannelName}`;
+        text = text.replace(
+          placeholder,
+          `<span class="channel-mention" data-channel="${escapeAttribute(linkChannelName)}" data-server="${escapeAttribute(linkServerUrl)}">${escapeHtml(displayText).replace(/#/g, "&#35;")}</span>`,
+        );
+        continue;
+      }
+    }
 
     if (YOUTUBE_REGEX.test(rawUrl)) {
       text = text.replace(

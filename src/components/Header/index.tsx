@@ -3,6 +3,7 @@ import { useSignalEffect } from "@preact/signals";
 import {
   currentServer,
   currentChannel,
+  currentThread,
   unreadByChannel,
   unreadPings,
   getServerPingCount,
@@ -16,7 +17,10 @@ import {
   pingsInboxOffset,
   PINGS_INBOX_LIMIT,
   servers,
+  currentUserByServer,
+  hasCapability,
 } from "../../state";
+import { joinThread, leaveThread } from "../../lib/actions";
 import { Icon } from "../Icon";
 import {
   mobileSidebarOpen,
@@ -49,12 +53,18 @@ export function Header() {
 
   const isDM = serverUrl.value === DM_SERVER_URL;
   const ch = currentChannel.value;
+  const thread = currentThread.value;
   const isChatChannel = ch !== null && ch.type === "chat";
   const caps = serverCapabilities.value;
   const canPin =
     caps.includes("message_pin") && caps.includes("messages_pinned");
   const canSearch = caps.includes("messages_search");
   const canInbox = caps.includes("pings_get");
+  const supportsJoinLeave =
+    hasCapability("thread_join") && hasCapability("thread_leave");
+
+  const myUsername = currentUserByServer.value[serverUrl.value]?.username;
+  const isThreadParticipant = thread?.participants?.includes(myUsername || "");
 
   const serverPingTotal = servers.value.reduce(
     (sum, s) => sum + getServerPingCount(s.url),
@@ -192,8 +202,36 @@ export function Header() {
             currentChannel.value?.name ||
             "home"}
         </span>
+        {thread && thread.participants && thread.participants.length > 0 && (
+          <span className="header-thread-participants">
+            <Icon name="Users" size={14} />
+            {thread.participants.length}
+          </span>
+        )}
       </div>
       <div className="main-header-right">
+        {thread &&
+          supportsJoinLeave &&
+          !thread.locked &&
+          (isThreadParticipant ? (
+            <button
+              className="header-thread-btn leave"
+              onClick={() => leaveThread(thread.id)}
+              title="Leave Thread"
+            >
+              <Icon name="UserMinus" size={18} />
+              <span>Leave</span>
+            </button>
+          ) : (
+            <button
+              className="header-thread-btn join"
+              onClick={() => joinThread(thread.id)}
+              title="Join Thread"
+            >
+              <Icon name="UserPlus" size={18} />
+              <span>Join</span>
+            </button>
+          ))}
         {isChatChannel && (
           <CallButton className="header-icon-btn" iconSize={20} />
         )}

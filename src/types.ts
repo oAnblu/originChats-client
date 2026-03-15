@@ -18,6 +18,7 @@ export interface Thread {
   created_at: number;
   locked: boolean;
   archived: boolean;
+  participants?: string[];
 }
 
 export interface VoiceUser {
@@ -43,6 +44,7 @@ export interface RoturAccount {
 
 export interface ServerUser {
   username: string;
+  nickname?: string;
   roles?: string[];
   color?: string | null;
   status?: "online" | "idle" | "offline";
@@ -71,6 +73,14 @@ export interface Server {
   name: string;
   url: string;
   icon?: string | null;
+}
+
+export interface ServerFolder {
+  id: string;
+  name: string;
+  color?: string;
+  serverUrls: string[];
+  collapsed?: boolean;
 }
 
 export interface DMServer {

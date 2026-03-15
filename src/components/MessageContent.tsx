@@ -110,6 +110,7 @@ export function MessageContent({
       ),
       validRoles: mentionableRoles,
       roleColors,
+      currentServerUrl: serverUrl.value,
     };
     const links: string[] = [];
     const parsed = parseMarkdown(content, links, mentionCtx);

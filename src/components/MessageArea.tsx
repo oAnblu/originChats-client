@@ -28,6 +28,9 @@ import {
   PINGS_INBOX_LIMIT,
   reachedOldestByServer,
   serverCapabilities,
+  hasCapability,
+  currentUserByServer,
+  threadsByServer,
 } from "../state";
 
 import {
@@ -49,8 +52,14 @@ import {
   highlightCodeInContainer,
   setShortcodeMap,
   replaceShortcodes,
+  convertChannelMentionsToLinks,
 } from "../lib/markdown";
-import { selectChannel } from "../lib/actions";
+import {
+  selectChannel,
+  switchServer,
+  joinThread,
+  selectThread,
+} from "../lib/actions";
 import { getShortcodeMap, loadShortcodes } from "../lib/shortcodes";
 import { Icon } from "./Icon";
 import { MembersList } from "./MembersList";
@@ -157,6 +166,16 @@ async function sendMessage() {
   if (!hasText && !hasImages) return;
   if (!currentChannel.value) return;
 
+  const thread = currentThread.value;
+  const myUsername = currentUserByServer.value[serverUrl.value]?.username;
+  const isThread = currentChannel.value?.type === "thread";
+  if (isThread && thread && hasCapability("thread_join")) {
+    const isParticipant = thread.participants?.includes(myUsername || "");
+    if (!isParticipant) {
+      joinThread(thread.id);
+    }
+  }
+
   let finalContent = content;
   if (hasImages) {
     const imageUrls = pendingImageUploads.map((img) => img.url);
@@ -176,10 +195,12 @@ async function sendMessage() {
   pendingImageUploads = [];
   if (setPendingImagesRef) setPendingImagesRef([]);
 
-  const isThread = currentChannel.value?.type === "thread";
   const msg: any = {
     cmd: "message_new",
-    content: replaceShortcodes(finalContent),
+    content: convertChannelMentionsToLinks(
+      replaceShortcodes(finalContent),
+      serverUrl.value,
+    ),
     ...(isThread
       ? {
           thread_id: currentThread.value?.id,
@@ -259,7 +280,7 @@ function RightPanelMessageCard({ msg }: { msg: any }) {
             color: users.value[msg.user?.toLowerCase()]?.color || undefined,
           }}
         >
-          {msg.user}
+          {users.value[msg.user?.toLowerCase()]?.nickname || msg.user}
         </span>
         <span className="right-panel-time">
           {formatRelativeTime(msg.timestamp)}
@@ -704,7 +725,8 @@ function RightPanel() {
                                   undefined,
                               }}
                             >
-                              {msg.user}
+                              {users.value[msg.user?.toLowerCase()]?.nickname ||
+                                msg.user}
                             </span>
                             <span className="inbox-ping-card-time">
                               {formatRelativeTime(msg.timestamp)}
@@ -1304,7 +1326,10 @@ export function MessageArea() {
             id: editingMessage.id,
             channel: currentChannel.value?.name,
             ...(isThread && { thread_id: currentThread.value?.id }),
-            content: replaceShortcodes(input.value.trim()),
+            content: convertChannelMentionsToLinks(
+              replaceShortcodes(input.value.trim()),
+              serverUrl.value,
+            ),
           });
           setEditingMessage(null);
           input.value = "";
@@ -1541,7 +1566,7 @@ export function MessageArea() {
       return;
     }
 
-    // #channel-mention — navigate to that channel
+    // #channel-mention — navigate to that channel/thread
     const channelMention = target.closest(
       ".channel-mention",
     ) as HTMLElement | null;
@@ -1549,9 +1574,31 @@ export function MessageArea() {
       e.preventDefault();
       e.stopPropagation();
       const channelName = channelMention.dataset.channel;
-      if (channelName) {
-        const ch = channels.value.find((c) => c.name === channelName);
-        if (ch) selectChannel(ch);
+      const targetServerUrl = channelMention.dataset.server;
+      const threadId = channelMention.dataset.thread;
+
+      const navigate = () => {
+        if (threadId) {
+          const allThreads =
+            threadsByServer.value[targetServerUrl || serverUrl.value] || {};
+          for (const channelThreads of Object.values(allThreads)) {
+            const thread = channelThreads.find((t) => t.id === threadId);
+            if (thread) {
+              selectThread(thread);
+              return;
+            }
+          }
+        }
+        if (channelName) {
+          const ch = channels.value.find((c) => c.name === channelName);
+          if (ch) selectChannel(ch);
+        }
+      };
+
+      if (targetServerUrl && targetServerUrl !== serverUrl.value) {
+        switchServer(targetServerUrl).then(navigate);
+      } else {
+        navigate();
       }
       return;
     }
@@ -1887,7 +1934,8 @@ export function MessageArea() {
                           onClick={(e: any) => openUserPopout(e, msg.user)}
                           onContextMenu={(e: any) => showUserMenu(e, msg.user)}
                         >
-                          {msg.user}
+                          {users.value[msg.user?.toLowerCase()]?.nickname ||
+                            msg.user}
                         </span>
                         <span className="timestamp">
                           {formatTimestamp(msg.timestamp)}
@@ -1921,7 +1969,8 @@ export function MessageArea() {
                           onClick={(e: any) => openUserPopout(e, msg.user)}
                           onContextMenu={(e: any) => showUserMenu(e, msg.user)}
                         >
-                          {msg.user}
+                          {users.value[msg.user?.toLowerCase()]?.nickname ||
+                            msg.user}
                         </span>
                         <span className="timestamp">
                           {formatTimestamp(msg.timestamp)}
@@ -2039,12 +2088,26 @@ export function MessageArea() {
   const canReact =
     caps.includes("message_react_add") && caps.includes("message_react_remove");
 
-  // ── Call button / embedded voice logic ────────────────────────────────────
   const ch = currentChannel.value;
-  // Only channels explicitly typed as "chat" get the call button + embedded panel
   const isChatChannel = ch !== null && ch.type === "chat";
   const voice = voiceState.value;
   const inCallHere = isChatChannel && voice.currentChannel === ch?.name;
+
+  const canSendInChannel = (() => {
+    if (isDM) return true;
+    if (!ch) return true;
+    const sendPerms = (ch as any).permissions?.send;
+    if (!sendPerms) return true;
+    const myUsername = currentUserByServer.value[serverUrl.value]?.username;
+    const myRoles = users.value[myUsername?.toLowerCase() || ""]?.roles || [];
+    if (myUsername === "admin") return true;
+    return sendPerms.some(
+      (r: string) =>
+        myRoles.includes(r) ||
+        r === "user" ||
+        r.toLowerCase() === myUsername?.toLowerCase(),
+    );
+  })();
 
   return (
     <div className="main-content-wrapper">
@@ -2274,7 +2337,9 @@ export function MessageArea() {
                   placeholder={
                     editingMessage
                       ? "Edit your message..."
-                      : "Type a message..."
+                      : canSendInChannel
+                        ? "Type a message..."
+                        : "You can't talk here"
                   }
                   rows={1}
                   onKeyDown={handleKeyDown}
@@ -2284,6 +2349,8 @@ export function MessageArea() {
                     autocomplete.handleInput();
                   }}
                   onPaste={handlePaste as any}
+                  disabled={!canSendInChannel}
+                  className={!canSendInChannel ? "disabled-input" : ""}
                 />
                 <button
                   ref={pickerButtonRef}

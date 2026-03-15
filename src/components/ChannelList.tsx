@@ -1,4 +1,10 @@
-import { useReducer, useState } from "preact/hooks";
+import {
+  useReducer,
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+} from "preact/hooks";
 import { useSignalEffect } from "@preact/signals";
 
 import {
@@ -38,6 +44,7 @@ import {
   closeMobileNav,
   showContextMenu,
   showThreadPanel,
+  channelListWidth,
 } from "../lib/ui-signals";
 import { Icon } from "./Icon";
 import { voiceManager, voiceState } from "../voice";
@@ -116,7 +123,6 @@ export function ChannelList() {
 
     const setChannelNotif = (level: NotificationLevel) => {
       if (level === "mentions") {
-        // "mentions" is the default — remove any override so server/global default applies
         const next = { ...channelNotifSettings.value };
         delete next[channelKey];
         channelNotifSettings.value = next;
@@ -160,6 +166,14 @@ export function ChannelList() {
       },
       { separator: true, label: "", fn: () => {} },
       {
+        label: "Copy Channel Link",
+        icon: "Link",
+        fn: () => {
+          const link = `https://originchats.mistium.com/app/${sUrl}/${channel.name}`;
+          navigator.clipboard.writeText(link);
+        },
+      },
+      {
         label: "Copy Channel Name",
         icon: "Copy",
         fn: () => {
@@ -169,11 +183,51 @@ export function ChannelList() {
     ]);
   };
 
+  const resizeRef = useRef<HTMLDivElement>(null);
+  const isResizing = useRef(false);
+
+  const handleMouseDown = useCallback((e: MouseEvent) => {
+    if (e.target === resizeRef.current) {
+      isResizing.current = true;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    }
+  }, []);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return;
+    const newWidth = e.clientX - 72;
+    channelListWidth.value = Math.max(200, Math.min(500, newWidth));
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    if (isResizing.current) {
+      isResizing.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
   return (
     <div
       id="channels"
       className={`channels${mobileSidebarOpen.value ? " open" : ""}`}
+      style={{ width: `${channelListWidth.value}px` }}
     >
+      <div
+        ref={resizeRef}
+        className="channel-list-resize-handle"
+        onMouseDown={handleMouseDown}
+      />
       <div className="channel-header">
         <div className="channel-header-info">
           <div className="channel-header-name">
@@ -352,12 +406,12 @@ export function ChannelList() {
           const forumThreads = isForum
             ? threadsByServer.value[serverUrl.value]?.[channel.name] || []
             : [];
-          // Filter to only show recent threads (past 7 days)
-          const now = Date.now() / 1000;
-          const sevenDaysAgo = now - 7 * 24 * 60 * 60;
-          const recentThreads = forumThreads.filter(
-            (t: any) => t.created_at >= sevenDaysAgo,
-          );
+
+          const visibleThreads = forumThreads.filter((t: any) => {
+            const isParticipant = t.participants?.includes(myUsername);
+            const isCurrentThread = currentThread.value?.id === t.id;
+            return isParticipant || isCurrentThread;
+          });
 
           if (isForum) {
             const ch = currentChannel.value as any;
@@ -377,7 +431,7 @@ export function ChannelList() {
                   <Icon name="MessageCircle" size={18} />
                   <span>{displayName}</span>
                 </div>
-                {recentThreads.map((thread: any) => {
+                {visibleThreads.map((thread: any) => {
                   const threadPingKey = `${serverUrl.value}:thread:${thread.id}`;
                   const threadPingCount = unreadPings.value[threadPingKey] || 0;
                   const threadUnreadCount =

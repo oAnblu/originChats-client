@@ -4,6 +4,7 @@ import type {
   ServerUser,
   Message,
   Server,
+  ServerFolder,
   DMServer,
   Role,
   RoturAccount,
@@ -31,6 +32,7 @@ export const priorityServer = signal<string | null>(null);
 export const currentChannel = signal<Channel | null>(null);
 export const currentThread = signal<Thread | null>(null);
 export const servers = signal<Server[]>([]);
+export const serverFolders = signal<ServerFolder[]>([]);
 export const dmServers = signal<DMServer[]>([]);
 export const friends = signal<string[]>([]);
 export const friendRequests = signal<string[]>([]);

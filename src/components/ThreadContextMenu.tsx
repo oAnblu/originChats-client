@@ -1,8 +1,13 @@
 import { useState } from "preact/hooks";
-import { serverUrl, currentUserByServer, users } from "../state";
-import { selectThread, deleteThread, getThread } from "../lib/actions";
+import { serverUrl, currentUserByServer, users, hasCapability } from "../state";
+import {
+  selectThread,
+  deleteThread,
+  getThread,
+  joinThread,
+  leaveThread,
+} from "../lib/actions";
 import { wsSend } from "../lib/websocket";
-import { updateThreadInChannel } from "../state";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Icon } from "./Icon";
 import type { Thread } from "../types";
@@ -27,6 +32,10 @@ export function ThreadContextMenu({
     myUsername === "admin" ||
     myRoles.includes("owner");
 
+  const supportsJoinLeave =
+    hasCapability("thread_join") && hasCapability("thread_leave");
+  const isParticipant = thread.participants?.includes(myUsername || "");
+
   const items: ContextMenuItem[] = [
     {
       label: "Open Thread",
@@ -44,11 +53,35 @@ export function ThreadContextMenu({
       label: "Copy Link",
       icon: "Link",
       fn: () => {
-        const link = `${window.location.origin}/app/${serverUrl.value}/projects/${thread.id}`;
+        const link = `https://originchats.mistium.com/app/${serverUrl.value}/projects/${thread.id}`;
         navigator.clipboard.writeText(link);
       },
     },
   ];
+
+  if (supportsJoinLeave && !thread.locked) {
+    items.push({ label: "", separator: true, fn: () => {} });
+
+    if (isParticipant) {
+      items.push({
+        label: "Leave Thread",
+        icon: "UserMinus",
+        fn: () => {
+          leaveThread(thread.id);
+          onClose();
+        },
+      });
+    } else {
+      items.push({
+        label: "Join Thread",
+        icon: "UserPlus",
+        fn: () => {
+          joinThread(thread.id);
+          onClose();
+        },
+      });
+    }
+  }
 
   if (canManage) {
     items.push({ label: "", separator: true, fn: () => {} });
@@ -57,14 +90,16 @@ export function ThreadContextMenu({
       label: thread.locked ? "Unlock Thread" : "Lock Thread",
       icon: thread.locked ? "Unlock" : "Lock",
       fn: () => {
-        updateThreadInChannel(
-          serverUrl.value,
-          thread.parent_channel,
-          thread.id,
+        wsSend(
           {
+            cmd: "thread_update",
+            thread_id: thread.id,
+            channel: thread.parent_channel,
             locked: !thread.locked,
           },
+          serverUrl.value,
         );
+        onClose();
       },
     });
 
@@ -72,14 +107,16 @@ export function ThreadContextMenu({
       label: thread.archived ? "Unarchive Thread" : "Archive Thread",
       icon: "Archive",
       fn: () => {
-        updateThreadInChannel(
-          serverUrl.value,
-          thread.parent_channel,
-          thread.id,
+        wsSend(
           {
+            cmd: "thread_update",
+            thread_id: thread.id,
+            channel: thread.parent_channel,
             archived: !thread.archived,
           },
+          serverUrl.value,
         );
+        onClose();
       },
     });
 
@@ -93,6 +130,7 @@ export function ThreadContextMenu({
         if (confirm("Are you sure you want to delete this thread?")) {
           deleteThread(thread.id);
         }
+        onClose();
       },
     });
   }
@@ -104,7 +142,16 @@ export function ThreadContextMenu({
       </div>
       <div className="context-menu-info">
         <span className="context-menu-name">{thread.name}</span>
-        <span className="context-menu-status">by {thread.created_by}</span>
+        <span className="context-menu-status">
+          by {thread.created_by}
+          {thread.participants && thread.participants.length > 0 && (
+            <span className="context-menu-participants">
+              {" · "}
+              <Icon name="Users" size={10} />
+              {thread.participants.length}
+            </span>
+          )}
+        </span>
       </div>
     </>
   );

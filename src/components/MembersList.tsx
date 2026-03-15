@@ -3,6 +3,7 @@ import {
   serverUrl,
   users,
   currentChannel,
+  currentThread,
   messages,
   rolesByServer,
   DM_SERVER_URL,
@@ -21,9 +22,11 @@ export function MembersList() {
   const { showUserMenu, closeUserMenu, userMenu } = useUserContextMenu();
 
   const isDM = serverUrl.value === DM_SERVER_URL;
+  const thread = currentThread.value;
 
   let memberList: Array<{
     username: string;
+    nickname?: string;
     status: string | undefined;
     color: string;
     roles: string[];
@@ -39,6 +42,7 @@ export function MembersList() {
     ];
     memberList = uniqueUsernames.map((username) => ({
       username,
+      nickname: users.value[username?.toLowerCase()]?.nickname,
       status: users.value[username?.toLowerCase()]?.status,
       color: users.value[username?.toLowerCase()]?.color || null,
       roles: users.value[username?.toLowerCase()]?.roles || [],
@@ -55,10 +59,17 @@ export function MembersList() {
       })
       .map((u) => ({
         username: u.username,
+        nickname: u.nickname,
         status: u.status,
         color: u.color || null,
         roles: u.roles || [],
       }));
+  }
+
+  if (thread && thread.participants) {
+    memberList = memberList.filter((m) =>
+      thread.participants?.includes(m.username),
+    );
   }
 
   const rolesMap = rolesByServer.value[serverUrl.value] || {};
@@ -200,7 +211,7 @@ function MemberItem({
         className="name"
         style={user.color ? { color: user.color } : undefined}
       >
-        {user.username}
+        {user.nickname || user.username}
       </span>
     </div>
   );

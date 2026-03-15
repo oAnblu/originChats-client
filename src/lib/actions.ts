@@ -382,6 +382,14 @@ export function deleteThread(threadId: string): void {
   wsSend({ cmd: "thread_delete", thread_id: threadId }, serverUrl.value);
 }
 
+export function joinThread(threadId: string): void {
+  wsSend({ cmd: "thread_join", thread_id: threadId }, serverUrl.value);
+}
+
+export function leaveThread(threadId: string): void {
+  wsSend({ cmd: "thread_leave", thread_id: threadId }, serverUrl.value);
+}
+
 export function getThread(threadId: string): void {
   wsSend({ cmd: "thread_get", thread_id: threadId }, serverUrl.value);
 }

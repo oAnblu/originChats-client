@@ -924,6 +924,44 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       }
       break;
     }
+    case "thread_join": {
+      const threadJoin = msg as any;
+      if (threadJoin.thread && threadJoin.thread_id) {
+        updateThreadInChannel(
+          sUrl,
+          threadJoin.thread.parent_channel,
+          threadJoin.thread_id,
+          { participants: threadJoin.thread.participants },
+        );
+        if (currentThread.value?.id === threadJoin.thread_id) {
+          currentThread.value = {
+            ...currentThread.value,
+            participants: threadJoin.thread.participants,
+          };
+        }
+        renderChannelsSignal.value++;
+      }
+      break;
+    }
+    case "thread_leave": {
+      const threadLeave = msg as any;
+      if (threadLeave.thread && threadLeave.thread_id) {
+        updateThreadInChannel(
+          sUrl,
+          threadLeave.thread.parent_channel,
+          threadLeave.thread_id,
+          { participants: threadLeave.thread.participants },
+        );
+        if (currentThread.value?.id === threadLeave.thread_id) {
+          currentThread.value = {
+            ...currentThread.value,
+            participants: threadLeave.thread.participants,
+          };
+        }
+        renderChannelsSignal.value++;
+      }
+      break;
+    }
     case "thread_messages": {
       const threadMsgs = msg as any;
       if (threadMsgs.thread_id && threadMsgs.messages) {
@@ -1198,9 +1236,23 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         myUsername &&
         msgNew.message.user !== myUsername &&
         !isMuted &&
+        !isCurrentView &&
         notifLevel !== "all"
       ) {
         const pingKeyToUse = isThreadMessage ? threadKey! : channelKey;
+
+        // Auto-join thread when pinged
+        if (
+          isThreadMessage &&
+          msgNew.thread_id &&
+          (isUserPinged || isRolePinged || isReplyPinged)
+        ) {
+          const caps = serverCapabilitiesByServer.value[sUrl] ?? [];
+          if (caps.includes("thread_join")) {
+            wsSend({ cmd: "thread_join", thread_id: msgNew.thread_id }, sUrl);
+          }
+        }
+
         if (isUserPinged) {
           if (!isCurrentView) {
             unreadPings.value = {
@@ -1638,6 +1690,30 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
           status: msg.status,
         };
         renderMembersSignal.value++;
+      }
+      break;
+    }
+    case "nickname_update": {
+      const uKey = msg.username?.toLowerCase();
+      if (usersByServer.value[sUrl]?.[uKey]) {
+        usersByServer.value[sUrl][uKey] = {
+          ...usersByServer.value[sUrl][uKey],
+          nickname: msg.nickname,
+        };
+        renderMembersSignal.value++;
+        renderMessagesSignal.value++;
+      }
+      break;
+    }
+    case "nickname_remove": {
+      const uKey = msg.username?.toLowerCase();
+      if (usersByServer.value[sUrl]?.[uKey]) {
+        usersByServer.value[sUrl][uKey] = {
+          ...usersByServer.value[sUrl][uKey],
+        };
+        delete usersByServer.value[sUrl][uKey].nickname;
+        renderMembersSignal.value++;
+        renderMessagesSignal.value++;
       }
       break;
     }
