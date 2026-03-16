@@ -51,6 +51,7 @@ import { voiceManager, voiceState } from "../voice";
 import { openUserPopout } from "./UserPopout";
 import type { VoiceUser } from "../types";
 import { avatarUrl } from "../utils";
+import { useDisplayName } from "../lib/useDisplayName";
 import { updateStatus, clearStatus } from "../lib/rotur-api";
 import { saveNotifSettings } from "../lib/persistence";
 import { ThreadContextMenu, useThreadContextMenu } from "./ThreadContextMenu";
@@ -590,6 +591,7 @@ export function ChannelList() {
 function UserPanel() {
   const sUrl = serverUrl.value;
   const username = currentUserByServer.value[sUrl]?.username;
+  const displayName = useDisplayName(username || "");
 
   if (!username) return null;
 
@@ -597,10 +599,10 @@ function UserPanel() {
     <div className="channel-user-panel">
       <div className="channel-user-panel-identity">
         <div className="channel-user-panel-avatar">
-          <img src={avatarUrl(username)} alt={username} />
+          <img src={avatarUrl(username)} alt={displayName} />
         </div>
         <div className="channel-user-panel-info">
-          <div className="channel-user-panel-name">{username}</div>
+          <div className="channel-user-panel-name">{displayName}</div>
         </div>
       </div>
       <button

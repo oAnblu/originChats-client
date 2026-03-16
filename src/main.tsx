@@ -24,6 +24,7 @@ import {
   friends,
   friendRequests,
   blockedUsers,
+  friendNicknames,
   roturFollowing,
   roturStatuses,
   isOffline,
@@ -50,6 +51,7 @@ import {
   loadReadTimes,
   loadNotifSettings,
   loadFolders,
+  loadFriendNicknames,
 } from "./lib/persistence";
 import { OriginFSClientClass } from "./originFSKit";
 import { connectToServer } from "./lib/websocket";
@@ -197,6 +199,9 @@ function App() {
 
     const loadedFolders = await loadFolders();
     serverFolders.value = loadedFolders;
+
+    const loadedNicknames = await loadFriendNicknames();
+    friendNicknames.value = loadedNicknames;
 
     const savedServerUrl =
       (await dbSession.get<string>("serverUrl", "")) || DM_SERVER_URL;

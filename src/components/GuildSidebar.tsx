@@ -28,6 +28,7 @@ import {
 } from "../lib/ui-signals";
 import { Icon, ServerIcon } from "./Icon";
 import { avatarUrl, reloadServerIcon } from "../utils";
+import { useDisplayName } from "../lib/useDisplayName";
 import { saveNotifSettings, saveFolders } from "../lib/persistence";
 
 const ITEM_HEIGHT = 48;
@@ -389,28 +390,9 @@ export function GuildSidebar() {
               unreadByChannel.value[`${DM_SERVER_URL}:${dm.channel}`] || 0;
             return unread > 0;
           })
-          .map((dm) => {
-            const unread =
-              unreadByChannel.value[`${DM_SERVER_URL}:${dm.channel}`] || 0;
-            return (
-              <div
-                key={dm.channel}
-                className="guild-item dm-server"
-                onClick={() => openDMWith(dm.username)}
-                onContextMenu={(e) => handleDMContextMenu(e, dm)}
-              >
-                <div className="guild-icon">
-                  <img src={avatarUrl(dm.username)} alt={dm.name} />
-                </div>
-                <div className="guild-pill" />
-                {unread > 0 ? (
-                  <div className="guild-ping-badge">{unread}</div>
-                ) : (
-                  <div className="guild-unread-dot" />
-                )}
-              </div>
-            );
-          })}
+          .map((dm) => (
+            <DMServerItem key={dm.channel} dm={dm} />
+          ))}
 
         <div className="guild-divider" />
 
@@ -586,6 +568,47 @@ export function GuildSidebar() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function DMServerItem({
+  dm,
+}: {
+  dm: { channel: string; username: string; name: string };
+}) {
+  const unread = unreadByChannel.value[`${DM_SERVER_URL}:${dm.channel}`] || 0;
+  const displayName = useDisplayName(dm.username);
+  return (
+    <div
+      className="guild-item dm-server"
+      onClick={() => openDMWith(dm.username)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        showContextMenu(e, [
+          {
+            label: "Mark as Read",
+            icon: "CheckCircle",
+            fn: () => markServerAsRead(DM_SERVER_URL),
+          },
+          { separator: true, label: "", fn: () => {} },
+          {
+            label: "Copy Username",
+            icon: "Copy",
+            fn: () => navigator.clipboard.writeText(dm.username),
+          },
+        ]);
+      }}
+    >
+      <div className="guild-icon">
+        <img src={avatarUrl(dm.username)} alt={displayName} />
+      </div>
+      <div className="guild-pill" />
+      {unread > 0 ? (
+        <div className="guild-ping-badge">{unread}</div>
+      ) : (
+        <div className="guild-unread-dot" />
+      )}
     </div>
   );
 }

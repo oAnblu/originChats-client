@@ -79,6 +79,39 @@ import type { SlashCommandArgs } from "./SlashCommandInput";
 import { useScrollLock } from "./useScrollLock";
 import type { Message, SlashCommand } from "../types";
 import { avatarUrl } from "../utils";
+import {
+  useDisplayName,
+  getDisplayNameWithServerNick,
+} from "../lib/useDisplayName";
+
+function MessageUsername({
+  username,
+  color,
+  serverNick,
+  className = "username",
+  onClick,
+  onContextMenu,
+}: {
+  username: string;
+  color?: string;
+  serverNick?: string;
+  className?: string;
+  onClick?: (e: any) => void;
+  onContextMenu?: (e: any) => void;
+}) {
+  const displayName = useDisplayName(username);
+  const showName = serverNick || displayName;
+  return (
+    <span
+      className={className}
+      style={color ? { color } : undefined}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      {showName}
+    </span>
+  );
+}
 import { ErrorBannerStack } from "./ErrorBanner";
 import { createGift, ROTUR_GIFT_URL } from "../lib/rotur-api";
 import { VoiceCallView } from "./VoiceCallView";
@@ -274,14 +307,12 @@ function RightPanelMessageCard({ msg }: { msg: any }) {
           className="right-panel-avatar"
           alt={msg.user}
         />
-        <span
+        <MessageUsername
+          username={msg.user}
+          color={users.value[msg.user?.toLowerCase()]?.color}
+          serverNick={users.value[msg.user?.toLowerCase()]?.nickname}
           className="right-panel-username"
-          style={{
-            color: users.value[msg.user?.toLowerCase()]?.color || undefined,
-          }}
-        >
-          {users.value[msg.user?.toLowerCase()]?.nickname || msg.user}
-        </span>
+        />
         <span className="right-panel-time">
           {formatRelativeTime(msg.timestamp)}
         </span>
@@ -717,17 +748,16 @@ function RightPanel() {
                         />
                         <div className="inbox-ping-card-content">
                           <div className="inbox-ping-card-header">
-                            <span
+                            <MessageUsername
+                              username={msg.user}
+                              color={
+                                users.value[msg.user?.toLowerCase()]?.color
+                              }
+                              serverNick={
+                                users.value[msg.user?.toLowerCase()]?.nickname
+                              }
                               className="inbox-ping-card-username"
-                              style={{
-                                color:
-                                  users.value[msg.user?.toLowerCase()]?.color ||
-                                  undefined,
-                              }}
-                            >
-                              {users.value[msg.user?.toLowerCase()]?.nickname ||
-                                msg.user}
-                            </span>
+                            />
                             <span className="inbox-ping-card-time">
                               {formatRelativeTime(msg.timestamp)}
                             </span>
@@ -1928,15 +1958,16 @@ export function MessageArea() {
                     />
                     <div className="message-group-content">
                       <div className="message-header">
-                        <span
+                        <MessageUsername
+                          username={msg.user}
+                          color={getUserColor(msg.user)}
+                          serverNick={
+                            users.value[msg.user?.toLowerCase()]?.nickname
+                          }
                           className="username clickable"
-                          style={{ color: getUserColor(msg.user) }}
                           onClick={(e: any) => openUserPopout(e, msg.user)}
                           onContextMenu={(e: any) => showUserMenu(e, msg.user)}
-                        >
-                          {users.value[msg.user?.toLowerCase()]?.nickname ||
-                            msg.user}
-                        </span>
+                        />
                         <span className="timestamp">
                           {formatTimestamp(msg.timestamp)}
                         </span>
@@ -1963,15 +1994,16 @@ export function MessageArea() {
                     />
                     <div className="message-group-content">
                       <div className="message-header">
-                        <span
+                        <MessageUsername
+                          username={msg.user}
+                          color={getUserColor(msg.user)}
+                          serverNick={
+                            users.value[msg.user?.toLowerCase()]?.nickname
+                          }
                           className="username clickable"
-                          style={{ color: getUserColor(msg.user) }}
                           onClick={(e: any) => openUserPopout(e, msg.user)}
                           onContextMenu={(e: any) => showUserMenu(e, msg.user)}
-                        >
-                          {users.value[msg.user?.toLowerCase()]?.nickname ||
-                            msg.user}
-                        </span>
+                        />
                         <span className="timestamp">
                           {formatTimestamp(msg.timestamp)}
                         </span>
@@ -2796,23 +2828,29 @@ function ReactionModal({ emoji, users, onClose }: ReactionModalProps) {
             <Icon name="X" size={16} />
           </button>
         </div>
-        <div className="reaction-modal-list">
-          {users.length === 0 ? (
-            <div className="reaction-modal-empty">No reactions yet</div>
-          ) : (
-            users.map((username) => (
-              <div key={username} className="reaction-modal-user">
-                <img
-                  src={avatarUrl(username)}
-                  className="reaction-modal-avatar"
-                  alt={username}
-                />
-                <span className="reaction-modal-username">{username}</span>
-              </div>
-            ))
-          )}
-        </div>
+
+        {users.length === 0 ? (
+          <div className="reaction-modal-empty">No reactions yet</div>
+        ) : (
+          users.map((username) => (
+            <ReactionUserItem key={username} username={username} />
+          ))
+        )}
       </div>
+    </div>
+  );
+}
+
+function ReactionUserItem({ username }: { username: string }) {
+  const displayName = useDisplayName(username);
+  return (
+    <div className="reaction-modal-user">
+      <img
+        src={avatarUrl(username)}
+        className="reaction-modal-avatar"
+        alt={displayName}
+      />
+      <span className="reaction-modal-username">{displayName}</span>
     </div>
   );
 }

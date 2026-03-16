@@ -13,6 +13,7 @@ import { Icon } from "./Icon";
 import { UserContextMenu, useUserContextMenu } from "./UserContextMenu";
 import { openUserPopout } from "./UserPopout";
 import { avatarUrl } from "../utils";
+import { useDisplayName } from "../lib/useDisplayName";
 
 export function MembersList() {
   useSignalEffect(() => {
@@ -196,6 +197,8 @@ function MemberItem({
   offline?: boolean;
   onContextMenu: (e: MouseEvent, username: string) => void;
 }) {
+  const displayName = useDisplayName(user.username);
+  const showName = user.nickname || displayName;
   return (
     <div
       className={`member${offline ? " offline" : ""}`}
@@ -203,14 +206,14 @@ function MemberItem({
       onContextMenu={(e: any) => onContextMenu(e, user.username)}
     >
       <div className="member-avatar-wrapper">
-        <img src={avatarUrl(user.username)} alt={user.username} />
+        <img src={avatarUrl(user.username)} alt={showName} />
         {!offline && <div className="member-status-indicator" />}
       </div>
       <span
         className="name"
         style={user.color ? { color: user.color } : undefined}
       >
-        {user.nickname || user.username}
+        {showName}
       </span>
     </div>
   );

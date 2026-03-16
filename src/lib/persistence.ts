@@ -6,6 +6,7 @@ import {
   friends,
   friendRequests,
   blockedUsers,
+  friendNicknames,
   serverNotifSettings,
   channelNotifSettings,
 } from "../state";
@@ -154,5 +155,34 @@ export async function saveFolders(): Promise<void> {
     await originFS.commit();
   } catch (error) {
     console.error("Failed to save folders:", error);
+  }
+}
+
+export async function loadFriendNicknames(): Promise<Record<string, string>> {
+  const originFS = getOriginFS();
+  if (!originFS) return {};
+  try {
+    await originFS.loadIndex();
+    const content = await originFS.readFileContent(
+      "/application data/chats@mistium/friend_nicknames.json",
+    );
+    return JSON.parse(content);
+  } catch {
+    return {};
+  }
+}
+
+export async function saveFriendNicknames(): Promise<void> {
+  const originFS = getOriginFS();
+  if (!originFS) return;
+  const path = "/application data/chats@mistium/friend_nicknames.json";
+  try {
+    await originFS.createFolders("/application data/chats@mistium");
+    if (await originFS.exists(path))
+      await originFS.writeFile(path, JSON.stringify(friendNicknames.value));
+    else await originFS.createFile(path, JSON.stringify(friendNicknames.value));
+    await originFS.commit();
+  } catch (error) {
+    console.error("Failed to save friend nicknames:", error);
   }
 }

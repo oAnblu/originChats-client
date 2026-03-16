@@ -29,6 +29,7 @@ import {
 } from "../lib/rotur-api";
 import { Icon } from "./Icon";
 import { avatarUrl } from "../utils";
+import { useDisplayName } from "../lib/useDisplayName";
 import type { RoturGroup } from "../types";
 import { Header } from "./Header";
 
@@ -194,6 +195,7 @@ function FriendItem({
   onRemove: () => void;
 }) {
   const status = roturStatuses.value[username.toLowerCase()];
+  const displayName = useDisplayName(username);
 
   // Fetch status on first render if not cached
   useEffect(() => {
@@ -221,7 +223,7 @@ function FriendItem({
           className="dm-username"
           onClick={() => (showAccountModal.value = username)}
         >
-          {username}
+          {displayName}
         </span>
         {status?.content && (
           <span className="dm-friend-status">{status.content}</span>
@@ -261,32 +263,39 @@ function RequestsList() {
   return (
     <>
       {list.map((username) => (
-        <div key={username} className="dm-friend-item">
-          <img
-            src={avatarUrl(username)}
-            className="dm-avatar"
-            onClick={() => (showAccountModal.value = username)}
-          />
-          <span className="dm-username">{username}</span>
-          <div className="dm-actions">
-            <button
-              className="dm-action-btn dm-action-accept"
-              title="Accept"
-              onClick={() => acceptFriend(username).catch(console.error)}
-            >
-              <Icon name="Check" size={18} />
-            </button>
-            <button
-              className="dm-action-btn dm-action-danger"
-              title="Deny"
-              onClick={() => denyFriend(username).catch(console.error)}
-            >
-              <Icon name="X" size={18} />
-            </button>
-          </div>
-        </div>
+        <RequestItem key={username} username={username} />
       ))}
     </>
+  );
+}
+
+function RequestItem({ username }: { username: string }) {
+  const displayName = useDisplayName(username);
+  return (
+    <div className="dm-friend-item">
+      <img
+        src={avatarUrl(username)}
+        className="dm-avatar"
+        onClick={() => (showAccountModal.value = username)}
+      />
+      <span className="dm-username">{displayName}</span>
+      <div className="dm-actions">
+        <button
+          className="dm-action-btn dm-action-accept"
+          title="Accept"
+          onClick={() => acceptFriend(username).catch(console.error)}
+        >
+          <Icon name="Check" size={18} />
+        </button>
+        <button
+          className="dm-action-btn dm-action-danger"
+          title="Deny"
+          onClick={() => denyFriend(username).catch(console.error)}
+        >
+          <Icon name="X" size={18} />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -308,21 +317,28 @@ function BlockedList() {
   return (
     <>
       {list.map((username) => (
-        <div key={username} className="dm-friend-item">
-          <img src={avatarUrl(username)} className="dm-avatar" />
-          <span className="dm-username">{username}</span>
-          <div className="dm-actions">
-            <button
-              className="dm-action-btn"
-              title="Unblock"
-              onClick={() => unblockUser(username).catch(console.error)}
-            >
-              <Icon name="ShieldOff" size={18} />
-            </button>
-          </div>
-        </div>
+        <BlockedItem key={username} username={username} />
       ))}
     </>
+  );
+}
+
+function BlockedItem({ username }: { username: string }) {
+  const displayName = useDisplayName(username);
+  return (
+    <div className="dm-friend-item">
+      <img src={avatarUrl(username)} className="dm-avatar" />
+      <span className="dm-username">{displayName}</span>
+      <div className="dm-actions">
+        <button
+          className="dm-action-btn"
+          title="Unblock"
+          onClick={() => unblockUser(username).catch(console.error)}
+        >
+          <Icon name="ShieldOff" size={18} />
+        </button>
+      </div>
+    </div>
   );
 }
 

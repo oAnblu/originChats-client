@@ -37,6 +37,7 @@ export const dmServers = signal<DMServer[]>([]);
 export const friends = signal<string[]>([]);
 export const friendRequests = signal<string[]>([]);
 export const blockedUsers = signal<string[]>([]);
+export const friendNicknames = signal<Record<string, string>>({});
 export const replyTo = signal<Message | null>(null);
 export const replyPing = signal<boolean>(true);
 

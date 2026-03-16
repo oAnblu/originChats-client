@@ -1092,24 +1092,27 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         ? `${sUrl}:thread:${msgNew.thread_id}`
         : null;
 
-      if (!isCurrentView && !isMuted) {
+      let myUsername = currentUserByServer.value[sUrl]?.username;
+      const isOwnMessage = msgNew.message.user === myUsername;
+
+      if (
+        !isCurrentView &&
+        !isMuted &&
+        !(sUrl === DM_SERVER_URL && isOwnMessage)
+      ) {
         const keyToIncrement = isThreadMessage ? threadKey! : channelKey;
         unreadByChannel.value = {
           ...unreadByChannel.value,
           [keyToIncrement]: (unreadByChannel.value[keyToIncrement] || 0) + 1,
         };
 
-        if (
-          sUrl === DM_SERVER_URL &&
-          msgNew.message.user !== currentUserByServer.value[sUrl]?.username &&
-          dmMessageSound.value
-        ) {
+        if (sUrl === DM_SERVER_URL && !isOwnMessage && dmMessageSound.value) {
           playPingSound();
         }
 
         // "all" mode: treat every incoming message as a ping
         if (notifLevel === "all") {
-          const myUsername = currentUserByServer.value[sUrl]?.username;
+          myUsername = currentUserByServer.value[sUrl]?.username;
           if (msgNew.message.user !== myUsername) {
             const pingKeyToIncrement = isThreadMessage
               ? threadKey!
@@ -1210,7 +1213,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         }
       }
 
-      const myUsername = currentUserByServer.value[sUrl]?.username;
+      myUsername = currentUserByServer.value[sUrl]?.username;
       const myRoles =
         usersByServer.value[sUrl]?.[myUsername?.toLowerCase() || ""]?.roles ||
         [];

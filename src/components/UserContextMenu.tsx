@@ -1,5 +1,11 @@
 import { useState } from "preact/hooks";
-import { friends, friendRequests, blockedUsers, currentUser } from "../state";
+import {
+  friends,
+  friendRequests,
+  blockedUsers,
+  currentUser,
+  friendNicknames,
+} from "../state";
 import {
   openDMWith,
   sendFriendRequest,
@@ -13,6 +19,8 @@ import { showAccountModal } from "../lib/ui-signals";
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu";
 import { Icon } from "./Icon";
 import { avatarUrl, reloadAvatar } from "../utils";
+import { useDisplayName } from "../lib/useDisplayName";
+import { saveFriendNicknames } from "../lib/persistence";
 
 export interface UserContextMenuProps {
   username: string;
@@ -31,6 +39,21 @@ export function UserContextMenu({
   const isFriend = friends.value.includes(username);
   const isBlocked = blockedUsers.value.includes(username);
   const hasPendingRequest = friendRequests.value.includes(username);
+  const currentNickname = friendNicknames.value[username] || "";
+  const displayName = useDisplayName(username);
+
+  const setNickname = (newNick: string) => {
+    if (newNick.trim()) {
+      friendNicknames.value = {
+        ...friendNicknames.value,
+        [username]: newNick.trim(),
+      };
+    } else {
+      const { [username]: _, ...rest } = friendNicknames.value;
+      friendNicknames.value = rest;
+    }
+    saveFriendNicknames().catch(() => {});
+  };
 
   const items: ContextMenuItem[] = [
     {
@@ -74,6 +97,14 @@ export function UserContextMenu({
       );
     } else if (isFriend) {
       items.push({
+        label: currentNickname ? "Edit Nickname" : "Set Nickname",
+        icon: "Edit3",
+        fn: () => {
+          const newNick = prompt("Enter nickname:", currentNickname);
+          if (newNick !== null) setNickname(newNick);
+        },
+      });
+      items.push({
         label: "Remove Friend",
         icon: "UserX",
         danger: true,
@@ -108,10 +139,13 @@ export function UserContextMenu({
       <img
         src={avatarUrl(username)}
         className="context-menu-avatar"
-        alt={username}
+        alt={displayName}
       />
       <div className="context-menu-info">
-        <span className="context-menu-name">{username}</span>
+        <span className="context-menu-name">{displayName}</span>
+        {currentNickname && (
+          <span className="context-menu-username">{username}</span>
+        )}
         <span className="context-menu-status">
           {isSelf
             ? "You"

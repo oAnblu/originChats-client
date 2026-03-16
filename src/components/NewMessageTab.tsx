@@ -3,6 +3,7 @@ import { useSignalEffect } from "@preact/signals";
 import { friends, currentUser } from "../state";
 import { Icon } from "./Icon";
 import { avatarUrl } from "../utils";
+import { useDisplayName } from "../lib/useDisplayName";
 import { openDMWith } from "../lib/actions";
 import { Header } from "./Header";
 
@@ -59,22 +60,11 @@ export function NewMessageTab() {
             )}
           {filtered.length > 0 ? (
             filtered.map((username) => (
-              <div
+              <NewMessageFriendItem
                 key={username}
-                className="new-message-item"
+                username={username}
                 onClick={() => startDM(username)}
-              >
-                <img
-                  src={avatarUrl(username)}
-                  className="new-message-item-avatar"
-                  alt={username}
-                />
-                <div className="new-message-item-info">
-                  <span className="new-message-item-name">{username}</span>
-                  <span className="new-message-item-hint">Friend</span>
-                </div>
-                <Icon name="MessageCircle" size={16} />
-              </div>
+              />
             ))
           ) : !search.trim() ? (
             <div className="dm-empty">
@@ -88,6 +78,30 @@ export function NewMessageTab() {
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function NewMessageFriendItem({
+  username,
+  onClick,
+}: {
+  username: string;
+  onClick: () => void;
+}) {
+  const displayName = useDisplayName(username);
+  return (
+    <div className="new-message-item" onClick={onClick}>
+      <img
+        src={avatarUrl(username)}
+        className="new-message-item-avatar"
+        alt={displayName}
+      />
+      <div className="new-message-item-info">
+        <span className="new-message-item-name">{displayName}</span>
+        <span className="new-message-item-hint">Friend</span>
+      </div>
+      <Icon name="MessageCircle" size={16} />
     </div>
   );
 }
