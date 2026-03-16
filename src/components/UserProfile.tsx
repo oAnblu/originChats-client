@@ -321,6 +321,7 @@ export function UserProfileCard({
 }) {
   const { profile, loading, isFollowing, toggleFollow } = useProfile(username);
   const displayName = useDisplayName(username);
+  const hasNickname = friendNicknames.value[username];
   const statusClass = getUserStatus(username);
   const userRoles = getUserRoles(username);
   const friendState = getFriendState(username);
@@ -376,7 +377,7 @@ export function UserProfileCard({
             onClick={() => (showAccountModal.value = username)}
           >
             {displayName}
-            {friendNicknames.value[username] && (
+            {hasNickname && (
               <span className="profile-card-actual-username">{username}</span>
             )}
           </div>
@@ -467,7 +468,7 @@ export function UserProfileCard({
             onClick={() => (showAccountModal.value = username)}
           >
             {displayName}
-            {friendNicknames.value[username] && (
+            {hasNickname && (
               <span className="profile-card-actual-username">{username}</span>
             )}
           </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "preact/hooks";
+import { memo } from "preact/compat";
 import DOMPurify from "dompurify";
 import { parseMarkdown } from "../lib/markdown";
 import type { MentionContext } from "../lib/markdown";
@@ -15,6 +16,12 @@ import {
   getCachedImageSync,
   scheduleCleanup,
 } from "../lib/image-cache";
+
+const parseMemoCache = new Map<
+  string,
+  { html: string; embedLinks: string[] }
+>();
+const MAX_PARSE_CACHE = 200;
 
 const IMAGE_EXTENSIONS = [
   "jpg",
@@ -58,7 +65,7 @@ function isSingleEmoji(text: string): boolean {
   return SINGLE_EMOJI_RE.test(trimmed);
 }
 
-export function MessageContent({
+function MessageContentInner({
   content,
   currentUsername,
   authorUsername,
@@ -282,3 +289,5 @@ export function MessageContent({
     </>
   );
 }
+
+export const MessageContent = memo(MessageContentInner);

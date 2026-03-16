@@ -35,6 +35,9 @@ hljs.registerLanguage("json", json);
 hljs.registerLanguage("markdown", markdown);
 hljs.registerLanguage("md", markdown);
 
+const parseCache = new Map<string, { result: string; embedLinks: string[] }>();
+const MAX_CACHE_SIZE = 500;
+
 const YOUTUBE_REGEX =
   /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/;
 
@@ -145,6 +148,13 @@ export function parseMarkdown(
   embedLinks: string[] = [],
   mentionCtx?: MentionContext,
 ): string {
+  const cacheKey = text;
+  const cached = parseCache.get(cacheKey);
+  if (cached) {
+    embedLinks.push(...cached.embedLinks);
+    return cached.result;
+  }
+
   const codeBlocks: Array<{ placeholder: string; lang: string; code: string }> =
     [];
 
@@ -381,14 +391,21 @@ export function parseMarkdown(
   }
 
   for (const spoiler of spoilers) {
-    // The spoiler inner text is passed through the same markdown pipeline
-    // so formatting like **bold** still works inside spoilers.
     const innerHtml = parseMarkdown(spoiler.inner, [], mentionCtx);
     text = text.replace(
       spoiler.placeholder,
       `<span class="spoiler" role="button" tabindex="0" aria-label="Spoiler">${innerHtml}</span>`,
     );
   }
+
+  if (parseCache.size > MAX_CACHE_SIZE) {
+    const keysToDelete = [...parseCache.keys()].slice(
+      0,
+      parseCache.size - MAX_CACHE_SIZE,
+    );
+    keysToDelete.forEach((k) => parseCache.delete(k));
+  }
+  parseCache.set(cacheKey, { result: text, embedLinks: [...embedLinks] });
 
   return text;
 }

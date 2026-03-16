@@ -95,7 +95,7 @@ export function UserContextMenu({
           fn: () => denyFriend(username),
         },
       );
-    } else if (isFriend) {
+    } else if (isFriend || isSelf) {
       items.push({
         label: currentNickname ? "Edit Nickname" : "Set Nickname",
         icon: "Edit3",
@@ -104,12 +104,14 @@ export function UserContextMenu({
           if (newNick !== null) setNickname(newNick);
         },
       });
-      items.push({
-        label: "Remove Friend",
-        icon: "UserX",
-        danger: true,
-        fn: () => removeFriend(username),
-      });
+      if (isFriend) {
+        items.push({
+          label: "Remove Friend",
+          icon: "UserX",
+          danger: true,
+          fn: () => removeFriend(username),
+        });
+      }
     } else if (!isBlocked) {
       items.push({
         label: "Send Friend Request",

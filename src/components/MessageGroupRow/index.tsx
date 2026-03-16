@@ -1,3 +1,5 @@
+import { memo } from "preact/compat";
+import { useMemo } from "preact/hooks";
 import { currentUser, users } from "../../state";
 import { avatarUrl } from "../../utils";
 import { MessageContent } from "../MessageContent";
@@ -28,11 +30,35 @@ interface MessageGroupRowProps {
   onContextMenu?: (e: any) => void;
 }
 
-export function MessageGroupRow({
+function MessageGroupRowInner({
   group,
   onClick,
   onContextMenu,
 }: MessageGroupRowProps) {
+  const headUser = group.head.user;
+  const headUserLower = headUser?.toLowerCase();
+  const user = users.value[headUserLower];
+  const color = user?.color;
+  const nickname = user?.nickname;
+  const displayName = nickname || headUser;
+  const currentUsername = currentUser.value?.username;
+
+  const followingMessages = useMemo(
+    () =>
+      group.following.map((msg) => (
+        <div key={msg.id} className="message-single">
+          <span className="timestamp">{formatRelativeTime(msg.timestamp)}</span>
+          <MessageContent
+            content={msg.content}
+            currentUsername={currentUsername}
+            authorUsername={msg.user}
+            pings={msg.pings}
+          />
+        </div>
+      )),
+    [group.following, currentUsername],
+  );
+
   return (
     <div
       className="message-group"
@@ -40,23 +66,19 @@ export function MessageGroupRow({
       onContextMenu={onContextMenu}
     >
       <img
-        src={avatarUrl(group.head.user)}
+        src={avatarUrl(headUser)}
         className="avatar clickable"
-        alt={group.head.user}
-        onClick={(e: any) => openUserPopout(e, group.head.user)}
+        alt={headUser}
+        onClick={(e: any) => openUserPopout(e, headUser)}
       />
       <div className="message-group-content">
         <div className="message-header">
           <span
             className="username clickable"
-            style={{
-              color:
-                users.value[group.head.user?.toLowerCase()]?.color || undefined,
-            }}
-            onClick={(e: any) => openUserPopout(e, group.head.user)}
+            style={{ color }}
+            onClick={(e: any) => openUserPopout(e, headUser)}
           >
-            {users.value[group.head.user?.toLowerCase()]?.nickname ||
-              group.head.user}
+            {displayName}
           </span>
           <span className="timestamp">
             {formatRelativeTime(group.head.timestamp)}
@@ -65,29 +87,17 @@ export function MessageGroupRow({
         <div className="message-body">
           <MessageContent
             content={group.head.content}
-            currentUsername={currentUser.value?.username}
-            authorUsername={group.head.user}
+            currentUsername={currentUsername}
+            authorUsername={headUser}
             pings={group.head.pings}
           />
         </div>
         {group.following.length > 0 && (
-          <div className="message-group-following">
-            {group.following.map((msg) => (
-              <div key={msg.id} className="message-single">
-                <span className="timestamp">
-                  {formatRelativeTime(msg.timestamp)}
-                </span>
-                <MessageContent
-                  content={msg.content}
-                  currentUsername={currentUser.value?.username}
-                  authorUsername={msg.user}
-                  pings={msg.pings}
-                />
-              </div>
-            ))}
-          </div>
+          <div className="message-group-following">{followingMessages}</div>
         )}
       </div>
     </div>
   );
 }
+
+export const MessageGroupRow = memo(MessageGroupRowInner);

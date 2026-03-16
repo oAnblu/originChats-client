@@ -1,4 +1,5 @@
-import { useSignalEffect } from "@preact/signals";
+import { useMemo } from "preact/hooks";
+import { memo } from "preact/compat";
 import {
   serverUrl,
   users,
@@ -15,11 +16,8 @@ import { openUserPopout } from "./UserPopout";
 import { avatarUrl } from "../utils";
 import { useDisplayName } from "../lib/useDisplayName";
 
-export function MembersList() {
-  useSignalEffect(() => {
-    renderMembersSignal.value;
-    users.value;
-  });
+function MembersListInner() {
+  renderMembersSignal.value;
 
   const { showUserMenu, closeUserMenu, userMenu } = useUserContextMenu();
 
@@ -188,7 +186,7 @@ export function MembersList() {
   );
 }
 
-function MemberItem({
+function MemberItemInner({
   user,
   offline,
   onContextMenu,
@@ -218,3 +216,7 @@ function MemberItem({
     </div>
   );
 }
+
+const MemberItem = memo(MemberItemInner);
+
+export const MembersList = memo(MembersListInner);

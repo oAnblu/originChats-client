@@ -19,21 +19,42 @@ import { useSystemEmojis } from "../state";
 const TWEMOJI_CDN_BASE =
   "https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg";
 
-/**
- * Walk a DOM container and replace Unicode emoji characters with <img> tags
- * pointing to the Twemoji CDN SVGs.
- *
- * When `useSystemEmojis` is true this is a no-op so the browser renders its
- * own glyph.
- */
+let pendingParse: {
+  container: HTMLElement;
+  timeout: ReturnType<typeof setTimeout> | null;
+} | null = null;
+
+function flushPendingParse() {
+  if (pendingParse) {
+    const { container } = pendingParse;
+    pendingParse = null;
+    twemoji.parse(container, {
+      className: "emoji",
+      folder: "svg",
+      ext: ".svg",
+    });
+  }
+}
+
 export function parseEmojisInContainer(container: HTMLElement): void {
   if (useSystemEmojis.value) return;
 
-  twemoji.parse(container, {
-    className: "emoji",
-    folder: "svg",
-    ext: ".svg",
-  });
+  if (pendingParse && pendingParse.container === container) {
+    return;
+  }
+
+  if (pendingParse) {
+    if (pendingParse.timeout) {
+      clearTimeout(pendingParse.timeout);
+    }
+    pendingParse.container = container;
+  } else {
+    pendingParse = { container, timeout: null };
+  }
+
+  pendingParse.timeout = setTimeout(() => {
+    flushPendingParse();
+  }, 16);
 }
 
 /**
