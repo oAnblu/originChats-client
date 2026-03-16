@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "preact/hooks";
+import { memo } from "preact/compat";
 import DOMPurify from "dompurify";
 import { parseMarkdown } from "../lib/markdown";
 import type { MentionContext } from "../lib/markdown";
@@ -10,6 +11,17 @@ import {
 import { Embed } from "../lib/embeds/index";
 import type { EmbedInfo } from "../lib/embeds/types";
 import { users, channels, rolesByServer, serverUrl } from "../state";
+import {
+  getCachedImage,
+  getCachedImageSync,
+  scheduleCleanup,
+} from "../lib/image-cache";
+
+const parseMemoCache = new Map<
+  string,
+  { html: string; embedLinks: string[] }
+>();
+const MAX_PARSE_CACHE = 200;
 
 const IMAGE_EXTENSIONS = [
   "jpg",
@@ -53,7 +65,7 @@ function isSingleEmoji(text: string): boolean {
   return SINGLE_EMOJI_RE.test(trimmed);
 }
 
-export function MessageContent({
+function MessageContentInner({
   content,
   currentUsername,
   authorUsername,
@@ -72,10 +84,6 @@ export function MessageContent({
       }
     }
 
-    // Compute which roles the message author is allowed to mention.
-    // mention_roles: true  → can mention any role
-    // mention_roles: string[] → can only mention those specific roles
-    // missing / false → cannot mention any role
     const authorRoles =
       (authorUsername
         ? users.value[authorUsername.toLowerCase()]?.roles
@@ -89,7 +97,6 @@ export function MessageContent({
       const perm = (roleDef.permissions as Record<string, any> | undefined)
         ?.mention_roles;
       if (perm === true) {
-        // Can mention every role — add all and stop early.
         for (const r of Object.keys(rolesMap)) {
           mentionableRoles.add(r.toLowerCase());
         }
@@ -110,6 +117,7 @@ export function MessageContent({
       ),
       validRoles: mentionableRoles,
       roleColors,
+      currentServerUrl: serverUrl.value,
     };
     const links: string[] = [];
     const parsed = parseMarkdown(content, links, mentionCtx);
@@ -127,7 +135,11 @@ export function MessageContent({
       mentioned =
         (pings.users || []).some(
           (u) => u.toLowerCase() === currentUsernameLower,
-        ) || mentionedRolesLower.some((r) => myRolesLower.has(r));
+        ) ||
+        mentionedRolesLower.some((r) => myRolesLower.has(r)) ||
+        (pings.replies || []).some(
+          (r) => r.toLowerCase() === currentUsernameLower,
+        );
     }
     return {
       html: DOMPurify.sanitize(parsed, { ADD_ATTR: ["target"] }),
@@ -180,9 +192,43 @@ export function MessageContent({
   }, [content]);
 
   useEffect(() => {
-    if (inlineImages.length === 0 || !messageTextRef.current) return;
+    if (!messageTextRef.current) return;
+    scheduleCleanup();
 
     const messageText = messageTextRef.current;
+    const placeholders = messageText.querySelectorAll<HTMLDivElement>(
+      "div.image-placeholder",
+    );
+
+    placeholders.forEach((placeholder) => {
+      const url = placeholder.dataset.imageUrl;
+      if (!url) return;
+
+      if (placeholder.dataset.processed) return;
+
+      placeholder.className = "chat-image-wrapper";
+      placeholder.removeAttribute("data-image-url");
+      placeholder.dataset.processed = "true";
+
+      const img = document.createElement("img");
+      img.alt = "image";
+      img.className = "message-image";
+      img.dataset.imageUrl = url;
+      img.loading = "lazy";
+      const syncCached = getCachedImageSync(url);
+      img.src = syncCached || proxyImageUrl(url);
+
+      placeholder.appendChild(img);
+
+      if (!syncCached) {
+        getCachedImage(url).then((cached) => {
+          if (cached && img.parentNode) {
+            img.src = cached;
+          }
+        });
+      }
+    });
+
     const potentialLinks =
       messageText.querySelectorAll<HTMLAnchorElement>("a.potential-image");
 
@@ -196,22 +242,34 @@ export function MessageContent({
 
       if (!isDetectedImage) return;
 
+      if (link.dataset.converted) return;
+      link.dataset.converted = "true";
+
       const wrapper = document.createElement("div");
       wrapper.className = "chat-image-wrapper";
 
       const img = document.createElement("img");
-      img.src = proxyImageUrl(url);
       img.alt = "image";
       img.className = "message-image";
       img.dataset.imageUrl = url;
+      img.loading = "lazy";
+      const syncCached = getCachedImageSync(url);
+      img.src = syncCached || proxyImageUrl(url);
 
       wrapper.appendChild(img);
       link.textContent = "";
       link.appendChild(wrapper);
       link.classList.remove("potential-image");
-      link.removeAttribute("data-image-url");
+
+      if (!syncCached) {
+        getCachedImage(url).then((cached) => {
+          if (cached && img.parentNode) {
+            img.src = cached;
+          }
+        });
+      }
     });
-  }, [inlineImages]);
+  }, [html, inlineImages]);
 
   return (
     <>
@@ -231,3 +289,5 @@ export function MessageContent({
     </>
   );
 }
+
+export const MessageContent = memo(MessageContentInner);

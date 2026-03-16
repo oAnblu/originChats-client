@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = "originchats";
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 
 const STORES = [
   "settings",
@@ -22,6 +22,7 @@ const STORES = [
   "readTimes",
   "favGifs",
   "mediaServers",
+  "folders",
 ] as const;
 
 export type StoreName = (typeof STORES)[number];
@@ -164,4 +165,10 @@ export const mediaServersDb = {
   get: <T>(): Promise<T | undefined> =>
     dbGet<T>("mediaServers", "mediaServers"),
   set: (value: unknown) => dbSet("mediaServers", "mediaServers", value),
+};
+
+/** Server folders. */
+export const foldersDb = {
+  get: <T>(): Promise<T | undefined> => dbGet<T>("folders", "folders"),
+  set: (value: unknown) => dbSet("folders", "folders", value),
 };

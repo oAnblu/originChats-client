@@ -19,7 +19,6 @@ import {
   serversAttempted,
   unreadByChannel,
   unreadPings,
-  serverPingsByServer,
   rolesByServer,
   slashCommandsByServer,
   dmServers,
@@ -461,10 +460,6 @@ export function clearServerState(sUrl: string): void {
 
   readTimesByServer.value = Object.fromEntries(
     Object.entries(readTimesByServer.value).filter(([key]) => key !== sUrl),
-  );
-
-  serverPingsByServer.value = Object.fromEntries(
-    Object.entries(serverPingsByServer.value).filter(([key]) => key !== sUrl),
   );
 
   renderChannelsSignal.value++;
@@ -929,6 +924,44 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       }
       break;
     }
+    case "thread_join": {
+      const threadJoin = msg as any;
+      if (threadJoin.thread && threadJoin.thread_id) {
+        updateThreadInChannel(
+          sUrl,
+          threadJoin.thread.parent_channel,
+          threadJoin.thread_id,
+          { participants: threadJoin.thread.participants },
+        );
+        if (currentThread.value?.id === threadJoin.thread_id) {
+          currentThread.value = {
+            ...currentThread.value,
+            participants: threadJoin.thread.participants,
+          };
+        }
+        renderChannelsSignal.value++;
+      }
+      break;
+    }
+    case "thread_leave": {
+      const threadLeave = msg as any;
+      if (threadLeave.thread && threadLeave.thread_id) {
+        updateThreadInChannel(
+          sUrl,
+          threadLeave.thread.parent_channel,
+          threadLeave.thread_id,
+          { participants: threadLeave.thread.participants },
+        );
+        if (currentThread.value?.id === threadLeave.thread_id) {
+          currentThread.value = {
+            ...currentThread.value,
+            participants: threadLeave.thread.participants,
+          };
+        }
+        renderChannelsSignal.value++;
+      }
+      break;
+    }
     case "thread_messages": {
       const threadMsgs = msg as any;
       if (threadMsgs.thread_id && threadMsgs.messages) {
@@ -1044,38 +1077,50 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         }
       }
 
+      const isThreadView =
+        isThreadMessage && currentThread.value?.id === msgNew.thread_id;
       const isCurrentView =
-        serverUrl.value === sUrl && currentChannel.value?.name === messageKey;
+        isThreadView ||
+        (!isThreadMessage &&
+          serverUrl.value === sUrl &&
+          currentChannel.value?.name === messageKey);
 
       const notifLevel = getChannelNotifLevel(sUrl, targetChannel);
       const isMuted = notifLevel === "none";
       const channelKey = `${sUrl}:${targetChannel}`;
+      const threadKey = isThreadMessage
+        ? `${sUrl}:thread:${msgNew.thread_id}`
+        : null;
 
-      if (!isCurrentView && !isMuted) {
+      let myUsername = currentUserByServer.value[sUrl]?.username;
+      const isOwnMessage = msgNew.message.user === myUsername;
+
+      if (
+        !isCurrentView &&
+        !isMuted &&
+        !(sUrl === DM_SERVER_URL && isOwnMessage)
+      ) {
+        const keyToIncrement = isThreadMessage ? threadKey! : channelKey;
         unreadByChannel.value = {
           ...unreadByChannel.value,
-          [channelKey]: (unreadByChannel.value[channelKey] || 0) + 1,
+          [keyToIncrement]: (unreadByChannel.value[keyToIncrement] || 0) + 1,
         };
 
-        if (
-          sUrl === DM_SERVER_URL &&
-          msgNew.message.user !== currentUserByServer.value[sUrl]?.username &&
-          dmMessageSound.value
-        ) {
+        if (sUrl === DM_SERVER_URL && !isOwnMessage && dmMessageSound.value) {
           playPingSound();
         }
 
         // "all" mode: treat every incoming message as a ping
         if (notifLevel === "all") {
-          const myUsername = currentUserByServer.value[sUrl]?.username;
+          myUsername = currentUserByServer.value[sUrl]?.username;
           if (msgNew.message.user !== myUsername) {
+            const pingKeyToIncrement = isThreadMessage
+              ? threadKey!
+              : channelKey;
             unreadPings.value = {
               ...unreadPings.value,
-              [channelKey]: (unreadPings.value[channelKey] || 0) + 1,
-            };
-            serverPingsByServer.value = {
-              ...serverPingsByServer.value,
-              [sUrl]: (serverPingsByServer.value[sUrl] || 0) + 1,
+              [pingKeyToIncrement]:
+                (unreadPings.value[pingKeyToIncrement] || 0) + 1,
             };
             playPingSound();
             const cleanContent = (msgNew.message.content || "").replace(
@@ -1129,6 +1174,13 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
           },
         };
 
+        const keyToClear = isThreadMessage ? threadKey! : channelKey;
+        if (unreadByChannel.value[keyToClear]) {
+          const newUnreads = { ...unreadByChannel.value };
+          delete newUnreads[keyToClear];
+          unreadByChannel.value = newUnreads;
+        }
+
         if (_readTimeFlushTimers[channelKey]) {
           clearTimeout(_readTimeFlushTimers[channelKey]);
         }
@@ -1161,7 +1213,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         }
       }
 
-      const myUsername = currentUserByServer.value[sUrl]?.username;
+      myUsername = currentUserByServer.value[sUrl]?.username;
       const myRoles =
         usersByServer.value[sUrl]?.[myUsername?.toLowerCase() || ""]?.roles ||
         [];
@@ -1187,13 +1239,28 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
         myUsername &&
         msgNew.message.user !== myUsername &&
         !isMuted &&
+        !isCurrentView &&
         notifLevel !== "all"
       ) {
+        const pingKeyToUse = isThreadMessage ? threadKey! : channelKey;
+
+        // Auto-join thread when pinged
+        if (
+          isThreadMessage &&
+          msgNew.thread_id &&
+          (isUserPinged || isRolePinged || isReplyPinged)
+        ) {
+          const caps = serverCapabilitiesByServer.value[sUrl] ?? [];
+          if (caps.includes("thread_join")) {
+            wsSend({ cmd: "thread_join", thread_id: msgNew.thread_id }, sUrl);
+          }
+        }
+
         if (isUserPinged) {
           if (!isCurrentView) {
             unreadPings.value = {
               ...unreadPings.value,
-              [channelKey]: (unreadPings.value[channelKey] || 0) + 1,
+              [pingKeyToUse]: (unreadPings.value[pingKeyToUse] || 0) + 1,
             };
             if (serverUrl.value === sUrl) renderChannelsSignal.value++;
           }
@@ -1211,16 +1278,12 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
             notifBody,
             msg.channel,
           );
-          serverPingsByServer.value = {
-            ...serverPingsByServer.value,
-            [sUrl]: (serverPingsByServer.value[sUrl] || 0) + 1,
-          };
           renderGuildSidebarSignal.value++;
         } else if (isRolePinged) {
           if (!isCurrentView) {
             unreadPings.value = {
               ...unreadPings.value,
-              [channelKey]: (unreadPings.value[channelKey] || 0) + 1,
+              [pingKeyToUse]: (unreadPings.value[pingKeyToUse] || 0) + 1,
             };
             if (serverUrl.value === sUrl) renderChannelsSignal.value++;
           }
@@ -1241,16 +1304,12 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
             notifBody,
             msg.channel,
           );
-          serverPingsByServer.value = {
-            ...serverPingsByServer.value,
-            [sUrl]: (serverPingsByServer.value[sUrl] || 0) + 1,
-          };
           renderGuildSidebarSignal.value++;
         } else if (isReplyPinged) {
           if (!isCurrentView) {
             unreadPings.value = {
               ...unreadPings.value,
-              [channelKey]: (unreadPings.value[channelKey] || 0) + 1,
+              [pingKeyToUse]: (unreadPings.value[pingKeyToUse] || 0) + 1,
             };
             if (serverUrl.value === sUrl) renderChannelsSignal.value++;
           }
@@ -1552,10 +1611,6 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       }
       if (totalNew > 0) {
         unreadPings.value = mergedPings;
-        serverPingsByServer.value = {
-          ...serverPingsByServer.value,
-          [sUrl]: (serverPingsByServer.value[sUrl] || 0) + totalNew,
-        };
         renderChannelsSignal.value++;
         renderGuildSidebarSignal.value++;
       }
@@ -1638,6 +1693,30 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
           status: msg.status,
         };
         renderMembersSignal.value++;
+      }
+      break;
+    }
+    case "nickname_update": {
+      const uKey = msg.username?.toLowerCase();
+      if (usersByServer.value[sUrl]?.[uKey]) {
+        usersByServer.value[sUrl][uKey] = {
+          ...usersByServer.value[sUrl][uKey],
+          nickname: msg.nickname,
+        };
+        renderMembersSignal.value++;
+        renderMessagesSignal.value++;
+      }
+      break;
+    }
+    case "nickname_remove": {
+      const uKey = msg.username?.toLowerCase();
+      if (usersByServer.value[sUrl]?.[uKey]) {
+        usersByServer.value[sUrl][uKey] = {
+          ...usersByServer.value[sUrl][uKey],
+        };
+        delete usersByServer.value[sUrl][uKey].nickname;
+        renderMembersSignal.value++;
+        renderMessagesSignal.value++;
       }
       break;
     }

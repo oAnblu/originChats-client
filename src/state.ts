@@ -4,6 +4,7 @@ import type {
   ServerUser,
   Message,
   Server,
+  ServerFolder,
   DMServer,
   Role,
   RoturAccount,
@@ -13,6 +14,8 @@ import type {
   Thread,
 } from "./types";
 import { settings as dbSettings } from "./lib/db";
+export { unreadState, messageState } from "./lib/state";
+export type { UnreadState, MessageState } from "./lib/state";
 
 export const token = signal<string | null>(null);
 export const DM_SERVER_URL = "dms.mistium.com";
@@ -29,10 +32,12 @@ export const priorityServer = signal<string | null>(null);
 export const currentChannel = signal<Channel | null>(null);
 export const currentThread = signal<Thread | null>(null);
 export const servers = signal<Server[]>([]);
+export const serverFolders = signal<ServerFolder[]>([]);
 export const dmServers = signal<DMServer[]>([]);
 export const friends = signal<string[]>([]);
 export const friendRequests = signal<string[]>([]);
 export const blockedUsers = signal<string[]>([]);
+export const friendNicknames = signal<Record<string, string>>({});
 export const replyTo = signal<Message | null>(null);
 export const replyPing = signal<boolean>(true);
 
@@ -46,12 +51,8 @@ export const threadMessagesByServer = signal<
 export const messagesByServer = signal<
   Record<string, Record<string, Message[]>>
 >({});
-// Tracks which channels have had at least one successful messages_get response.
-// message_new events for channels not in this set are not stored in messagesByServer
-// so that opening the channel always triggers a fresh messages_get fetch.
+
 export const loadedChannelsByServer: Record<string, Set<string>> = {};
-// Tracks channels where all historical messages have been loaded (server returned
-// fewer messages than the pagination limit, meaning the beginning has been reached).
 export const reachedOldestByServer: Record<string, Set<string>> = {};
 export const usersByServer = signal<Record<string, Record<string, ServerUser>>>(
   {},
@@ -63,12 +64,40 @@ export const readTimesByServer = signal<Record<string, Record<string, number>>>(
   {},
 );
 export const lastChannelByServer = signal<Record<string, string>>({});
-export const unreadByChannel = signal<Record<string, number>>({});
-export const unreadPings = signal<Record<string, number>>({});
+
+import { unreadState } from "./lib/state";
+export const unreadByChannel = unreadState.unreads;
+export const unreadPings = unreadState.pings;
 export const typingUsersByServer = signal<
   Record<string, Record<string, Map<string, number>>>
 >({});
-export const serverPingsByServer = signal<Record<string, number>>({});
+
+export function getServerPingCount(sUrl: string): number {
+  return unreadState.getServerPingCount(sUrl);
+}
+
+export function getServerUnreadCount(sUrl: string): number {
+  return unreadState.getServerUnreadCount(sUrl);
+}
+
+export function getChannelPingCount(sUrl: string, channelName: string): number {
+  return unreadState.getChannelPingCount(sUrl, channelName);
+}
+
+export function getChannelUnreadCount(
+  sUrl: string,
+  channelName: string,
+): number {
+  return unreadState.getChannelUnreadCount(sUrl, channelName);
+}
+
+export function clearChannelPings(sUrl: string, channelName: string): void {
+  unreadState.clearChannel(sUrl, channelName);
+}
+
+export function clearServerPings(sUrl: string): void {
+  unreadState.clearServer(sUrl);
+}
 
 export interface PingMessage {
   id: string;

@@ -10,6 +10,7 @@ import {
   currentChannel,
   currentThread,
   servers,
+  serverFolders,
   channelsByServer,
   messagesByServer,
   usersByServer,
@@ -23,6 +24,7 @@ import {
   friends,
   friendRequests,
   blockedUsers,
+  friendNicknames,
   roturFollowing,
   roturStatuses,
   isOffline,
@@ -48,6 +50,8 @@ import {
   loadServers,
   loadReadTimes,
   loadNotifSettings,
+  loadFolders,
+  loadFriendNicknames,
 } from "./lib/persistence";
 import { OriginFSClientClass } from "./originFSKit";
 import { connectToServer } from "./lib/websocket";
@@ -88,6 +92,7 @@ import { VoiceCallView } from "./components/VoiceCallView";
 import { GlobalContextMenu } from "./components/ContextMenu";
 import { DiscoveryPage } from "./components/DiscoveryPage";
 import { OfflineScreen } from "./components/OfflineScreen";
+import { LoadingScreen } from "./components/LoadingScreen";
 import { ThreadPanel, ThreadView } from "./components/ThreadPanel";
 import { MembersList } from "./components/MembersList";
 import { useFavicon } from "./lib/useFavicon";
@@ -191,6 +196,12 @@ function App() {
 
     const loadedServers = await loadServers();
     servers.value = loadedServers;
+
+    const loadedFolders = await loadFolders();
+    serverFolders.value = loadedFolders;
+
+    const loadedNicknames = await loadFriendNicknames();
+    friendNicknames.value = loadedNicknames;
 
     const savedServerUrl =
       (await dbSession.get<string>("serverUrl", "")) || DM_SERVER_URL;
@@ -324,7 +335,7 @@ function App() {
     boot();
   }, []);
 
-  if (isLoading) return <div className="loading-screen">Loading...</div>;
+  if (isLoading) return <LoadingScreen />;
 
   if (isOffline.value) {
     return <OfflineScreen onRetry={boot} />;

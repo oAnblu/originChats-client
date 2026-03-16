@@ -28,6 +28,9 @@ import {
   PINGS_INBOX_LIMIT,
   reachedOldestByServer,
   serverCapabilities,
+  hasCapability,
+  currentUserByServer,
+  threadsByServer,
 } from "../state";
 
 import {
@@ -49,8 +52,14 @@ import {
   highlightCodeInContainer,
   setShortcodeMap,
   replaceShortcodes,
+  convertChannelMentionsToLinks,
 } from "../lib/markdown";
-import { selectChannel } from "../lib/actions";
+import {
+  selectChannel,
+  switchServer,
+  joinThread,
+  selectThread,
+} from "../lib/actions";
 import { getShortcodeMap, loadShortcodes } from "../lib/shortcodes";
 import { Icon } from "./Icon";
 import { MembersList } from "./MembersList";
@@ -61,6 +70,7 @@ import { UnifiedPicker } from "./UnifiedPicker";
 import { uploadImage, getEnabledMediaServer } from "../lib/media-uploader";
 import { MessageContent } from "./MessageContent";
 import { MessageGroupRow } from "./MessageGroupRow";
+import { MessageActionButtons } from "./MessageActionButtons";
 import { openUserPopout } from "./UserPopout";
 import { UserProfileCard } from "./UserProfile";
 import { InputAutocomplete, useInputAutocomplete } from "./InputAutocomplete";
@@ -69,11 +79,45 @@ import type { SlashCommandArgs } from "./SlashCommandInput";
 import { useScrollLock } from "./useScrollLock";
 import type { Message, SlashCommand } from "../types";
 import { avatarUrl } from "../utils";
+import {
+  useDisplayName,
+  getDisplayNameWithServerNick,
+} from "../lib/useDisplayName";
+
+function MessageUsername({
+  username,
+  color,
+  serverNick,
+  className = "username",
+  onClick,
+  onContextMenu,
+}: {
+  username: string;
+  color?: string;
+  serverNick?: string;
+  className?: string;
+  onClick?: (e: any) => void;
+  onContextMenu?: (e: any) => void;
+}) {
+  const displayName = useDisplayName(username);
+  const showName = serverNick || displayName;
+  return (
+    <span
+      className={className}
+      style={color ? { color } : undefined}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+    >
+      {showName}
+    </span>
+  );
+}
 import { ErrorBannerStack } from "./ErrorBanner";
 import { createGift, ROTUR_GIFT_URL } from "../lib/rotur-api";
 import { VoiceCallView } from "./VoiceCallView";
 import { CallButton } from "./buttons/CallButton";
 import { Header } from "./Header";
+import { startChannelLoad, isChannelLoading } from "../lib/image-cache";
 
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -155,6 +199,16 @@ async function sendMessage() {
   if (!hasText && !hasImages) return;
   if (!currentChannel.value) return;
 
+  const thread = currentThread.value;
+  const myUsername = currentUserByServer.value[serverUrl.value]?.username;
+  const isThread = currentChannel.value?.type === "thread";
+  if (isThread && thread && hasCapability("thread_join")) {
+    const isParticipant = thread.participants?.includes(myUsername || "");
+    if (!isParticipant) {
+      joinThread(thread.id);
+    }
+  }
+
   let finalContent = content;
   if (hasImages) {
     const imageUrls = pendingImageUploads.map((img) => img.url);
@@ -174,10 +228,12 @@ async function sendMessage() {
   pendingImageUploads = [];
   if (setPendingImagesRef) setPendingImagesRef([]);
 
-  const isThread = currentChannel.value?.type === "thread";
   const msg: any = {
     cmd: "message_new",
-    content: replaceShortcodes(finalContent),
+    content: convertChannelMentionsToLinks(
+      replaceShortcodes(finalContent),
+      serverUrl.value,
+    ),
     ...(isThread
       ? {
           thread_id: currentThread.value?.id,
@@ -251,14 +307,12 @@ function RightPanelMessageCard({ msg }: { msg: any }) {
           className="right-panel-avatar"
           alt={msg.user}
         />
-        <span
+        <MessageUsername
+          username={msg.user}
+          color={users.value[msg.user?.toLowerCase()]?.color}
+          serverNick={users.value[msg.user?.toLowerCase()]?.nickname}
           className="right-panel-username"
-          style={{
-            color: users.value[msg.user?.toLowerCase()]?.color || undefined,
-          }}
-        >
-          {msg.user}
-        </span>
+        />
         <span className="right-panel-time">
           {formatRelativeTime(msg.timestamp)}
         </span>
@@ -694,16 +748,16 @@ function RightPanel() {
                         />
                         <div className="inbox-ping-card-content">
                           <div className="inbox-ping-card-header">
-                            <span
+                            <MessageUsername
+                              username={msg.user}
+                              color={
+                                users.value[msg.user?.toLowerCase()]?.color
+                              }
+                              serverNick={
+                                users.value[msg.user?.toLowerCase()]?.nickname
+                              }
                               className="inbox-ping-card-username"
-                              style={{
-                                color:
-                                  users.value[msg.user?.toLowerCase()]?.color ||
-                                  undefined,
-                              }}
-                            >
-                              {msg.user}
-                            </span>
+                            />
                             <span className="inbox-ping-card-time">
                               {formatRelativeTime(msg.timestamp)}
                             </span>
@@ -980,6 +1034,7 @@ function SwipeableMessage({
 export function MessageArea() {
   const lastChannelRef = useRef<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [channelLoading, setChannelLoading] = useState(false);
   const {
     containerRef: messagesContainerRef,
     showScrollBtn,
@@ -1183,6 +1238,38 @@ export function MessageArea() {
     if (isChannelSwitch) {
       setLoadingOlder(false);
       resetForChannel();
+
+      // Start loading images for the new channel
+      const ch = currentChannel.value;
+      if (ch && !SPECIAL_CHANNELS.has(ch.name)) {
+        const msgs =
+          currentChannel.value?.type === "thread" && currentThread.value
+            ? messages.value[currentThread.value.id] || []
+            : messages.value[ch.name] || [];
+
+        if (msgs.length > 0) {
+          const imageUrls: string[] = [];
+          msgs.forEach((msg) => {
+            if (msg.content) {
+              const urlMatch = msg.content.match(
+                /https?:\/\/[^\s<>"']+\.(?:jpg|jpeg|png|gif|webp|avif)/gi,
+              );
+              if (urlMatch) imageUrls.push(...urlMatch);
+            }
+          });
+
+          if (imageUrls.length > 0) {
+            const channelId =
+              ch.type === "thread" && currentThread.value
+                ? currentThread.value.id
+                : ch.name;
+            setChannelLoading(true);
+            startChannelLoad(channelId, imageUrls).then(() => {
+              setChannelLoading(false);
+            });
+          }
+        }
+      }
     }
   });
 
@@ -1269,7 +1356,10 @@ export function MessageArea() {
             id: editingMessage.id,
             channel: currentChannel.value?.name,
             ...(isThread && { thread_id: currentThread.value?.id }),
-            content: input.value.trim(),
+            content: convertChannelMentionsToLinks(
+              replaceShortcodes(input.value.trim()),
+              serverUrl.value,
+            ),
           });
           setEditingMessage(null);
           input.value = "";
@@ -1506,7 +1596,7 @@ export function MessageArea() {
       return;
     }
 
-    // #channel-mention — navigate to that channel
+    // #channel-mention — navigate to that channel/thread
     const channelMention = target.closest(
       ".channel-mention",
     ) as HTMLElement | null;
@@ -1514,9 +1604,31 @@ export function MessageArea() {
       e.preventDefault();
       e.stopPropagation();
       const channelName = channelMention.dataset.channel;
-      if (channelName) {
-        const ch = channels.value.find((c) => c.name === channelName);
-        if (ch) selectChannel(ch);
+      const targetServerUrl = channelMention.dataset.server;
+      const threadId = channelMention.dataset.thread;
+
+      const navigate = () => {
+        if (threadId) {
+          const allThreads =
+            threadsByServer.value[targetServerUrl || serverUrl.value] || {};
+          for (const channelThreads of Object.values(allThreads)) {
+            const thread = channelThreads.find((t) => t.id === threadId);
+            if (thread) {
+              selectThread(thread);
+              return;
+            }
+          }
+        }
+        if (channelName) {
+          const ch = channels.value.find((c) => c.name === channelName);
+          if (ch) selectChannel(ch);
+        }
+      };
+
+      if (targetServerUrl && targetServerUrl !== serverUrl.value) {
+        switchServer(targetServerUrl).then(navigate);
+      } else {
+        navigate();
       }
       return;
     }
@@ -1761,6 +1873,20 @@ export function MessageArea() {
             data-msg-id={msg.id}
             onContextMenu={(e: any) => handleMessageContextMenu(e, msg)}
           >
+            <MessageActionButtons
+              message={msg}
+              onReply={() => startReply(msg)}
+              onReact={(emoji) => handleReaction(msg, emoji)}
+              onOpenEmojiPicker={() => {
+                setReactingToMessage(msg);
+                setPickerTab("emoji");
+                setShowPicker(true);
+              }}
+              onContextMenu={(e) => handleMessageContextMenu(e as any, msg)}
+              canReact={canReact}
+              canReply={canReply}
+              isOwn={isOwn}
+            />
             {replyTo && canReply && (
               <div
                 className="message-reply"
@@ -1832,14 +1958,16 @@ export function MessageArea() {
                     />
                     <div className="message-group-content">
                       <div className="message-header">
-                        <span
+                        <MessageUsername
+                          username={msg.user}
+                          color={getUserColor(msg.user)}
+                          serverNick={
+                            users.value[msg.user?.toLowerCase()]?.nickname
+                          }
                           className="username clickable"
-                          style={{ color: getUserColor(msg.user) }}
                           onClick={(e: any) => openUserPopout(e, msg.user)}
                           onContextMenu={(e: any) => showUserMenu(e, msg.user)}
-                        >
-                          {msg.user}
-                        </span>
+                        />
                         <span className="timestamp">
                           {formatTimestamp(msg.timestamp)}
                         </span>
@@ -1866,14 +1994,16 @@ export function MessageArea() {
                     />
                     <div className="message-group-content">
                       <div className="message-header">
-                        <span
+                        <MessageUsername
+                          username={msg.user}
+                          color={getUserColor(msg.user)}
+                          serverNick={
+                            users.value[msg.user?.toLowerCase()]?.nickname
+                          }
                           className="username clickable"
-                          style={{ color: getUserColor(msg.user) }}
                           onClick={(e: any) => openUserPopout(e, msg.user)}
                           onContextMenu={(e: any) => showUserMenu(e, msg.user)}
-                        >
-                          {msg.user}
-                        </span>
+                        />
                         <span className="timestamp">
                           {formatTimestamp(msg.timestamp)}
                         </span>
@@ -1924,7 +2054,7 @@ export function MessageArea() {
         {Object.entries(reactions).map(([emoji, users]) => {
           if (!users || users.length === 0) return null;
           const hasReacted = users.includes(currentUser.value?.username);
-          const previewUsers = users.slice(0, 3);
+          const previewUsers = users.slice(0, 2);
           const overflow = users.length - previewUsers.length;
           return (
             <span
@@ -1990,12 +2120,26 @@ export function MessageArea() {
   const canReact =
     caps.includes("message_react_add") && caps.includes("message_react_remove");
 
-  // ── Call button / embedded voice logic ────────────────────────────────────
   const ch = currentChannel.value;
-  // Only channels explicitly typed as "chat" get the call button + embedded panel
   const isChatChannel = ch !== null && ch.type === "chat";
   const voice = voiceState.value;
   const inCallHere = isChatChannel && voice.currentChannel === ch?.name;
+
+  const canSendInChannel = (() => {
+    if (isDM) return true;
+    if (!ch) return true;
+    const sendPerms = (ch as any).permissions?.send;
+    if (!sendPerms) return true;
+    const myUsername = currentUserByServer.value[serverUrl.value]?.username;
+    const myRoles = users.value[myUsername?.toLowerCase() || ""]?.roles || [];
+    if (myUsername === "admin") return true;
+    return sendPerms.some(
+      (r: string) =>
+        myRoles.includes(r) ||
+        r === "user" ||
+        r.toLowerCase() === myUsername?.toLowerCase(),
+    );
+  })();
 
   return (
     <div className="main-content-wrapper">
@@ -2008,6 +2152,11 @@ export function MessageArea() {
           onDragOver={handleDragOver as any}
           onDrop={handleDrop as any}
         >
+          {channelLoading && currentMessages.length > 0 && (
+            <div className="channel-loading-overlay">
+              <div className="loading-throbber" />
+            </div>
+          )}
           <div
             id="messages"
             ref={messagesContainerRef}
@@ -2220,7 +2369,9 @@ export function MessageArea() {
                   placeholder={
                     editingMessage
                       ? "Edit your message..."
-                      : "Type a message..."
+                      : canSendInChannel
+                        ? "Type a message..."
+                        : "You can't talk here"
                   }
                   rows={1}
                   onKeyDown={handleKeyDown}
@@ -2230,6 +2381,8 @@ export function MessageArea() {
                     autocomplete.handleInput();
                   }}
                   onPaste={handlePaste as any}
+                  disabled={!canSendInChannel}
+                  className={!canSendInChannel ? "disabled-input" : ""}
                 />
                 <button
                   ref={pickerButtonRef}
@@ -2675,23 +2828,29 @@ function ReactionModal({ emoji, users, onClose }: ReactionModalProps) {
             <Icon name="X" size={16} />
           </button>
         </div>
-        <div className="reaction-modal-list">
-          {users.length === 0 ? (
-            <div className="reaction-modal-empty">No reactions yet</div>
-          ) : (
-            users.map((username) => (
-              <div key={username} className="reaction-modal-user">
-                <img
-                  src={avatarUrl(username)}
-                  className="reaction-modal-avatar"
-                  alt={username}
-                />
-                <span className="reaction-modal-username">{username}</span>
-              </div>
-            ))
-          )}
-        </div>
+
+        {users.length === 0 ? (
+          <div className="reaction-modal-empty">No reactions yet</div>
+        ) : (
+          users.map((username) => (
+            <ReactionUserItem key={username} username={username} />
+          ))
+        )}
       </div>
+    </div>
+  );
+}
+
+function ReactionUserItem({ username }: { username: string }) {
+  const displayName = useDisplayName(username);
+  return (
+    <div className="reaction-modal-user">
+      <img
+        src={avatarUrl(username)}
+        className="reaction-modal-avatar"
+        alt={displayName}
+      />
+      <span className="reaction-modal-username">{displayName}</span>
     </div>
   );
 }

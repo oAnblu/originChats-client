@@ -29,20 +29,26 @@ export function Icon({
 export function ServerIcon({
   server,
   className,
+  size,
 }: {
   server: { name: string; url?: string; icon?: string | null };
   className?: string;
+  size?: number;
 }) {
   const [failed, setFailed] = useState(false);
   const bust = server.url ? (serverIconBust.value[server.url] ?? 0) : 0;
   const key = `${bust}-${failed ? "f" : "ok"}`;
 
   const initials = server.name.substring(0, 2).toUpperCase();
+  const style = size
+    ? { fontSize: `${size}px`, width: `${size}px`, height: `${size}px` }
+    : {};
 
   if (!server.icon || failed) {
     return (
       <span
         className={className}
+        style={style}
         onClick={() => {
           if (failed) {
             setFailed(false);
@@ -61,6 +67,7 @@ export function ServerIcon({
       src={`${server.icon}${bustSuffix}`}
       alt={server.name}
       className={className}
+      style={style}
       onError={() => setFailed(true)}
     />
   );

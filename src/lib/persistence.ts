@@ -1,16 +1,18 @@
 import {
   token,
   servers,
+  serverFolders,
   readTimesByServer,
   friends,
   friendRequests,
   blockedUsers,
+  friendNicknames,
   serverNotifSettings,
   channelNotifSettings,
 } from "../state";
 import { getOriginFS, DEFAULT_SERVERS } from "../state";
 import type { NotificationLevel } from "../state";
-import type { Server } from "../types";
+import type { Server, ServerFolder } from "../types";
 import { getFriends } from "./rotur-api";
 
 export async function loadServers(): Promise<Server[]> {
@@ -124,5 +126,63 @@ export async function fetchMyAccountData(): Promise<void> {
     blockedUsers.value = data.blocked;
   } catch (error) {
     console.error("Failed to fetch account data:", error);
+  }
+}
+
+export async function loadFolders(): Promise<ServerFolder[]> {
+  const originFS = getOriginFS();
+  if (!originFS) return [];
+  try {
+    await originFS.loadIndex();
+    const content = await originFS.readFileContent(
+      "/application data/chats@mistium/folders.json",
+    );
+    return JSON.parse(content) as ServerFolder[];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveFolders(): Promise<void> {
+  const originFS = getOriginFS();
+  if (!originFS) return;
+  const path = "/application data/chats@mistium/folders.json";
+  try {
+    await originFS.createFolders("/application data/chats@mistium");
+    if (await originFS.exists(path))
+      await originFS.writeFile(path, JSON.stringify(serverFolders.value));
+    else await originFS.createFile(path, JSON.stringify(serverFolders.value));
+    await originFS.commit();
+  } catch (error) {
+    console.error("Failed to save folders:", error);
+  }
+}
+
+export async function loadFriendNicknames(): Promise<Record<string, string>> {
+  const originFS = getOriginFS();
+  if (!originFS) return {};
+  try {
+    await originFS.loadIndex();
+    const content = await originFS.readFileContent(
+      "/application data/chats@mistium/friend_nicknames.json",
+    );
+    return JSON.parse(content);
+  } catch {
+    return {};
+  }
+}
+
+export async function saveFriendNicknames(): Promise<void> {
+  const originFS = getOriginFS();
+  if (!originFS) return;
+  const path = "/application data/chats@mistium/friend_nicknames.json";
+  try {
+    await originFS.createFolders("/application data/chats@mistium");
+    if (await originFS.exists(path))
+      await originFS.writeFile(path, JSON.stringify(friendNicknames.value));
+    else await originFS.createFile(path, JSON.stringify(friendNicknames.value));
+    await originFS.commit();
+  } catch (error) {
+    console.error("Failed to save friend nicknames:", error);
   }
 }

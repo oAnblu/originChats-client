@@ -10,6 +10,7 @@ import {
   DM_SERVER_URL,
   roturFollowing,
   roturStatuses,
+  friendNicknames,
 } from "../state";
 import {
   switchServer,
@@ -23,6 +24,7 @@ import { showAccountModal } from "../lib/ui-signals";
 import { Icon, ServerIcon } from "./Icon";
 import type { RoturAccount, RoturProfile, Server } from "../types";
 import { avatarUrl, formatJoinDate } from "../utils";
+import { useDisplayName } from "../lib/useDisplayName";
 import {
   getProfile as fetchRoturProfile,
   followUser,
@@ -318,6 +320,8 @@ export function UserProfileCard({
   compactActions?: boolean;
 }) {
   const { profile, loading, isFollowing, toggleFollow } = useProfile(username);
+  const displayName = useDisplayName(username);
+  const hasNickname = friendNicknames.value[username];
   const statusClass = getUserStatus(username);
   const userRoles = getUserRoles(username);
   const friendState = getFriendState(username);
@@ -356,7 +360,7 @@ export function UserProfileCard({
           <div className="profile-card-avatar">
             <img
               src={profile.pfp || avatarUrl(profile.username)}
-              alt={profile.username}
+              alt={displayName}
             />
             <div className={`profile-card-status ${statusClass}`} />
           </div>
@@ -368,11 +372,16 @@ export function UserProfileCard({
           )}
         </div>
         <div className="profile-card-body">
-          <div
-            className="profile-card-username clickable"
-            onClick={() => (showAccountModal.value = username)}
-          >
-            {profile.username}
+          <div className="profile-card-names">
+            <div
+              className="profile-card-username clickable"
+              onClick={() => (showAccountModal.value = username)}
+            >
+              {displayName}
+            </div>
+            {hasNickname && (
+              <div className="profile-card-actual-username">{username}</div>
+            )}
           </div>
           {profile.pronouns && (
             <div className="profile-card-pronouns">{profile.pronouns}</div>
@@ -450,7 +459,7 @@ export function UserProfileCard({
           <div className="profile-panel-avatar">
             <img
               src={profile.pfp || avatarUrl(profile.username)}
-              alt={profile.username}
+              alt={displayName}
             />
             <div className={`profile-card-status ${statusClass}`} />
           </div>
@@ -460,7 +469,10 @@ export function UserProfileCard({
             className="profile-panel-username clickable"
             onClick={() => (showAccountModal.value = username)}
           >
-            {profile.username}
+            {displayName}
+            {hasNickname && (
+              <span className="profile-card-actual-username">{username}</span>
+            )}
           </div>
           {profile.pronouns && (
             <div className="profile-panel-pronouns">{profile.pronouns}</div>

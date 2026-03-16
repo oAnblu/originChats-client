@@ -1,8 +1,10 @@
-import { useSignalEffect } from "@preact/signals";
+import { useMemo } from "preact/hooks";
+import { memo } from "preact/compat";
 import {
   serverUrl,
   users,
   currentChannel,
+  currentThread,
   messages,
   rolesByServer,
   DM_SERVER_URL,
@@ -12,39 +14,39 @@ import { Icon } from "./Icon";
 import { UserContextMenu, useUserContextMenu } from "./UserContextMenu";
 import { openUserPopout } from "./UserPopout";
 import { avatarUrl } from "../utils";
+import { useDisplayName } from "../lib/useDisplayName";
 
-export function MembersList() {
-  useSignalEffect(() => {
-    renderMembersSignal.value;
-  });
+function MembersListInner() {
+  renderMembersSignal.value;
 
   const { showUserMenu, closeUserMenu, userMenu } = useUserContextMenu();
 
   const isDM = serverUrl.value === DM_SERVER_URL;
+  const thread = currentThread.value;
 
   let memberList: Array<{
     username: string;
+    nickname?: string;
     status: string | undefined;
     color: string;
     roles: string[];
   }>;
 
   if (isDM) {
-    const channelName = currentChannel.value?.name;
-    const channelMessages = channelName
-      ? Object.values(messages.value[channelName] || {})
-      : [];
-    const uniqueUsernames = [
-      ...new Set(channelMessages.map((m: any) => m.user).filter(Boolean)),
-    ];
-    memberList = uniqueUsernames.map((username) => ({
-      username,
-      status: users.value[username?.toLowerCase()]?.status,
-      color: users.value[username?.toLowerCase()]?.color || null,
-      roles: users.value[username?.toLowerCase()]?.roles || [],
-    }));
-
-    if (memberList.length === 0) return null;
+    const viewRoles = currentChannel.value?.permissions?.view;
+    memberList = Object.values(users.value)
+      .filter((u) => {
+        if (!viewRoles || viewRoles.length === 0) return true;
+        const userRoles = u.roles || [];
+        return viewRoles.some((r) => userRoles.includes(r));
+      })
+      .map((u) => ({
+        username: u.username,
+        nickname: u.nickname,
+        status: u.status,
+        color: u.color || null,
+        roles: u.roles || [],
+      }));
   } else {
     const viewRoles = currentChannel.value?.permissions?.view;
     memberList = Object.values(users.value)
@@ -55,10 +57,17 @@ export function MembersList() {
       })
       .map((u) => ({
         username: u.username,
+        nickname: u.nickname,
         status: u.status,
         color: u.color || null,
         roles: u.roles || [],
       }));
+  }
+
+  if (thread && thread.participants) {
+    memberList = memberList.filter((m) =>
+      thread.participants?.includes(m.username),
+    );
   }
 
   const rolesMap = rolesByServer.value[serverUrl.value] || {};
@@ -177,7 +186,7 @@ export function MembersList() {
   );
 }
 
-function MemberItem({
+function MemberItemInner({
   user,
   offline,
   onContextMenu,
@@ -186,6 +195,8 @@ function MemberItem({
   offline?: boolean;
   onContextMenu: (e: MouseEvent, username: string) => void;
 }) {
+  const displayName = useDisplayName(user.username);
+  const showName = user.nickname || displayName;
   return (
     <div
       className={`member${offline ? " offline" : ""}`}
@@ -193,15 +204,19 @@ function MemberItem({
       onContextMenu={(e: any) => onContextMenu(e, user.username)}
     >
       <div className="member-avatar-wrapper">
-        <img src={avatarUrl(user.username)} alt={user.username} />
+        <img src={avatarUrl(user.username)} alt={showName} />
         {!offline && <div className="member-status-indicator" />}
       </div>
       <span
         className="name"
         style={user.color ? { color: user.color } : undefined}
       >
-        {user.username}
+        {showName}
       </span>
     </div>
   );
 }
+
+const MemberItem = memo(MemberItemInner);
+
+export const MembersList = memo(MembersListInner);

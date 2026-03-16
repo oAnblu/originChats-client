@@ -110,3 +110,5 @@ export function closeContextMenu() {
 }
 
 export const showNotificationPrompt = signal(false);
+
+export const channelListWidth = signal(340);

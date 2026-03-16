@@ -76,7 +76,6 @@ export async function detectEmbedType(url: string) {
     return { type, url, path };
   }
 
-  // Wikipedia
   const wikiMatch = url.match(
     /(?:^|\/\/)([a-z]{2,})\.wikipedia\.org\/wiki\/([^#?]+)/i,
   );
@@ -89,7 +88,6 @@ export async function detectEmbedType(url: string) {
     };
   }
 
-  // Spotify
   if (
     /open\.spotify\.com\/(track|album|playlist|episode|artist)\/[A-Za-z0-9]+/i.test(
       url,
@@ -98,13 +96,11 @@ export async function detectEmbedType(url: string) {
     return { type: "spotify", url, spotifyUrl: url };
   }
 
-  // Steam store page
   const steamMatch = url.match(/store\.steampowered\.com\/app\/(\d+)/i);
   if (steamMatch) {
     return { type: "steam", url, steamAppId: steamMatch[1] };
   }
 
-  // MistWarp — project ID can be in the path (/123) or the hash (#123)
   const mistWarpMatch = url.match(/warp\.mistium\.com(?:\/(\d+)|[^#]*#(\d+))/i);
   if (mistWarpMatch) {
     return {
@@ -120,6 +116,13 @@ export async function detectEmbedType(url: string) {
   if (hasExtension(url, IMAGE_EXTENSIONS) || url.startsWith("data:image/")) {
     return { type: "image", url };
   }
+
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname === "localhost" || urlObj.hostname === "127.0.0.1") {
+      return { type: "unknown", url };
+    }
+  } catch {}
 
   try {
     const controller = new AbortController();
