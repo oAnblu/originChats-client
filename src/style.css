@@ -12128,6 +12128,11 @@ body,
   padding: 8px 16px 16px;
 }
 
+.profile-card-names {
+  display: flex;
+  flex-direction: column;
+}
+
 .profile-card-username {
   color: var(--text);
   font-size: 18px;
@@ -12136,6 +12141,12 @@ body,
 
 .profile-card-username:hover {
   text-decoration: underline;
+}
+
+.profile-card-actual-username {
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .profile-card-pronouns {

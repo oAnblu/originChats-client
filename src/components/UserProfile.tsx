@@ -372,13 +372,15 @@ export function UserProfileCard({
           )}
         </div>
         <div className="profile-card-body">
-          <div
-            className="profile-card-username clickable"
-            onClick={() => (showAccountModal.value = username)}
-          >
-            {displayName}
+          <div className="profile-card-names">
+            <div
+              className="profile-card-username clickable"
+              onClick={() => (showAccountModal.value = username)}
+            >
+              {displayName}
+            </div>
             {hasNickname && (
-              <span className="profile-card-actual-username">{username}</span>
+              <div className="profile-card-actual-username">{username}</div>
             )}
           </div>
           {profile.pronouns && (
