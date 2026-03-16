@@ -2023,7 +2023,7 @@ p {
   flex-direction: column;
   min-width: 0;
   position: relative;
-  margin: var(--space-2);
+  margin: var(--space-4);
 }
 
 .main-content-area > .messages-container {
@@ -6583,7 +6583,7 @@ a {
 .message-group,
 .message-single {
   position: relative;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease;
 }
 
 .message-group:hover,
