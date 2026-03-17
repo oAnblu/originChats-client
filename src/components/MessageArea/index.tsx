@@ -234,6 +234,9 @@ async function sendMessage() {
     content: convertChannelMentionsToLinks(
       replaceShortcodes(finalContent),
       serverUrl.value,
+      new Set(
+        channels.value.filter((c) => c.name).map((c) => c.name.toLowerCase()),
+      ),
     ),
     ...(isThread
       ? {
@@ -1355,6 +1358,11 @@ export function MessageArea() {
             content: convertChannelMentionsToLinks(
               replaceShortcodes(input.value.trim()),
               serverUrl.value,
+              new Set(
+                channels.value
+                  .filter((c) => c.name)
+                  .map((c) => c.name.toLowerCase()),
+              ),
             ),
           });
           setEditingMessage(null);

@@ -119,6 +119,7 @@ export function replaceShortcodes(text: string): string {
 export function convertChannelMentionsToLinks(
   text: string,
   currentServerUrl: string,
+  validChannels?: Set<string>,
 ): string {
   text = text.replace(
     /https:\/\/originchats\.mistium\.com\/app\/([^/\s?#]+)(?:\/([^/\s?#]+)(?:\/([a-f0-9-]+))?)?/gi,
@@ -129,9 +130,21 @@ export function convertChannelMentionsToLinks(
       return result;
     },
   );
+  const urlPlaceholders: Array<{ placeholder: string; url: string }> = [];
+  text = text.replace(/https?:\/\/[^\s"'\\]+[^\s"']+/g, (match) => {
+    const placeholder = `§URL_${urlPlaceholders.length}§`;
+    urlPlaceholders.push({ placeholder, url: match });
+    return placeholder;
+  });
   text = text.replace(/#([a-zA-Z0-9_-]+)/g, (_, channelName) => {
+    if (validChannels && !validChannels.has(channelName.toLowerCase())) {
+      return `#${channelName}`;
+    }
     return `originChats://${currentServerUrl}/${channelName}`;
   });
+  for (const { placeholder, url } of urlPlaceholders) {
+    text = text.replace(placeholder, url);
+  }
   return text;
 }
 
