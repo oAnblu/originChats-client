@@ -66,7 +66,7 @@ export const showVoiceCallView = signal(false);
 
 export const rightPanelView = signal<
   "members" | "pinned" | "search" | "inbox" | "threads" | null
->(null);
+>("members");
 
 export const showThreadPanel = signal(false);
 export const pinnedMessages = signal<Message[]>([]);
