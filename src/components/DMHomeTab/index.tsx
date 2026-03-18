@@ -91,7 +91,9 @@ export function DMHomeTab() {
                     const { saveServers } =
                       await import("../../lib/persistence");
                     await saveServers();
-                  } catch {}
+                  } catch (err) {
+                    console.error("Failed to save servers:", err);
+                  }
                 }
                 await switchServer(trimmed);
               }

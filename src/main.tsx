@@ -45,6 +45,7 @@ import {
   closeMobileNav,
   showThreadPanel,
   showNotificationPrompt,
+  handleError,
 } from "./lib/ui-signals";
 import {
   loadServers,
@@ -177,7 +178,9 @@ function App() {
           (data.following || []).map((u: string) => u.toLowerCase()),
         );
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("Failed to load follow state:", err);
+      });
 
     // Seed own custom status — non-blocking
     getStatus(meData.username)
@@ -189,7 +192,9 @@ function App() {
           };
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("Failed to load status:", err);
+      });
 
     const originFS = new OriginFSClientClass(token.value!);
     setOriginFS(originFS);
@@ -232,7 +237,9 @@ function App() {
         }
       }
     } catch (e) {
-      console.warn("[App] Failed to load cloud read times:", e);
+      handleError(e, "Failed to load message read status from cloud", {
+        autoDismissMs: 5000,
+      });
     }
 
     readTimesByServer.value = localReadTimes;
@@ -252,7 +259,9 @@ function App() {
       serverNotifSettings.value = mergedServer;
       channelNotifSettings.value = mergedChannel;
     } catch (e) {
-      console.warn("[App] Failed to load cloud notif settings:", e);
+      handleError(e, "Failed to load notification settings", {
+        autoDismissMs: 5000,
+      });
     }
 
     connectToServer(DM_SERVER_URL);

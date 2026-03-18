@@ -30,6 +30,63 @@ export function showBanner(opts: Omit<Banner, "id">): string {
   return id;
 }
 
+/** Show an error banner with optional retry action */
+export function showError(
+  message: string,
+  opts?: {
+    severity?: "error" | "warning";
+    serverUrl?: string;
+    actionLabel?: string;
+    onAction?: () => void;
+    autoDismissMs?: number;
+  },
+): string {
+  return showBanner({
+    kind: opts?.severity || "error",
+    message,
+    serverUrl: opts?.serverUrl,
+    action:
+      opts?.onAction && opts?.actionLabel
+        ? { label: opts.actionLabel, fn: opts.onAction }
+        : undefined,
+    autoDismissMs: opts?.autoDismissMs,
+  });
+}
+
+/** Show an info/warning banner */
+export function showInfo(
+  message: string,
+  opts?: {
+    serverUrl?: string;
+    autoDismissMs?: number;
+  },
+): string {
+  return showBanner({
+    kind: "info",
+    message,
+    serverUrl: opts?.serverUrl,
+    autoDismissMs: opts?.autoDismissMs,
+  });
+}
+
+/** Log error and show user-friendly error banner */
+export function handleError(
+  error: unknown,
+  userMessage: string,
+  opts?: {
+    serverUrl?: string;
+    actionLabel?: string;
+    onAction?: () => void;
+    logToConsole?: boolean;
+    autoDismissMs?: number;
+  },
+): string {
+  if (opts?.logToConsole !== false) {
+    console.error(`[Error] ${userMessage}:`, error);
+  }
+  return showError(userMessage, opts);
+}
+
 export function dismissBanner(id: string): void {
   banners.value = banners.value.filter((b) => b.id !== id);
 }

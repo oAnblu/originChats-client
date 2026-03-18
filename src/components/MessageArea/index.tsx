@@ -47,6 +47,7 @@ import {
   closeMobileNav,
   showContextMenu,
   showVoiceCallView,
+  showError,
 } from "../../lib/ui-signals";
 import { voiceState } from "../../voice";
 import { wsSend, fetchMissingReplyMessage } from "../../lib/websocket";
@@ -1406,8 +1407,9 @@ export function MessageArea() {
   const handleFileUpload = async (files: File[]) => {
     const server = await getEnabledMediaServer();
     if (!server) {
-      alert(
+      showError(
         "No media server configured. Please add a media server in settings.",
+        { autoDismissMs: 5000 },
       );
       return;
     }
@@ -1450,9 +1452,10 @@ export function MessageArea() {
             input.getAttribute("data-placeholder") || "Type a message...";
           input.disabled = false;
         }
-        alert(
+        showError(
           `Failed to upload ${file.name}: ${error.message || "Unknown error"}`,
         );
+        return;
       } finally {
         setUploading(false);
       }
@@ -1470,7 +1473,9 @@ export function MessageArea() {
     );
 
     if (imageFiles.length === 0) {
-      alert("Only image and video files are supported");
+      showError("Only image and video files are supported", {
+        autoDismissMs: 3000,
+      });
       return;
     }
 

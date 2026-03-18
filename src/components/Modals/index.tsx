@@ -51,6 +51,7 @@ import {
 import { Icon, ServerIcon } from "../Icon";
 import { Checkbox } from "../Checkbox";
 import { LoadingButton } from "../LoadingButton";
+import { handleError } from "../../lib/ui-signals";
 import {
   switchServer,
   logout,
@@ -139,6 +140,7 @@ export function SettingsModal() {
       }
     } catch (e: any) {
       setSaveMsg(e.message || "Network error");
+      handleError(e, "Failed to save profile changes", { autoDismissMs: 3000 });
     } finally {
       setSaving(false);
     }
@@ -1468,7 +1470,9 @@ function previewPingSound(type: PingSoundType, volume: number) {
       const a = new Audio(uri);
       a.volume = volume;
       a.play().catch(() => {});
-    } catch (_) {}
+    } catch (e) {
+      console.warn("Failed to play custom ping sound:", e);
+    }
     return;
   }
   try {
@@ -1500,7 +1504,9 @@ function previewPingSound(type: PingSoundType, volume: number) {
     osc.stop(
       ctx.currentTime + (type === "pop" ? 0.08 : type === "bell" ? 0.6 : 0.4),
     );
-  } catch (_) {}
+  } catch (e) {
+    console.warn("Failed to play default ping sound:", e);
+  }
 }
 
 function StandingTab() {
@@ -1518,7 +1524,8 @@ function StandingTab() {
         setStanding(data?.standing ?? null);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((e) => {
+        handleError(e, "Failed to load standing information");
         setError(true);
         setLoading(false);
       });
@@ -2151,7 +2158,10 @@ export function AccountModal({ username }: { username: string }) {
         if (profile)
           setProfile({ ...profile, followers: (profile.followers || 0) + 1 });
       }
-    } catch {
+    } catch (e) {
+      handleError(e, "Failed to update follow status", {
+        autoDismissMs: 3000,
+      });
     } finally {
       setFollowWorking(false);
     }
