@@ -672,6 +672,7 @@ p {
 }
 
 .right-panel {
+  overflow: scroll;
   display: flex;
   flex-direction: column;
 }
