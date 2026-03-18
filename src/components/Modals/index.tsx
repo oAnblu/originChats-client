@@ -52,6 +52,7 @@ import { Icon, ServerIcon } from "../Icon";
 import { Checkbox } from "../Checkbox";
 import { LoadingButton } from "../LoadingButton";
 import { handleError, showInfo } from "../../lib/ui-signals";
+import { getCharacterCountColor } from "../../lib/validation";
 import {
   switchServer,
   logout,
@@ -500,7 +501,12 @@ export function SettingsModal() {
                   maxLength={1000}
                 />
                 <div className="settings-field-footer">
-                  <span className="settings-char-count">{bio.length}/1000</span>
+                  <span
+                    className="settings-char-count"
+                    style={{ color: getCharacterCountColor(bio.length, 1000) }}
+                  >
+                    {bio.length}/1000
+                  </span>
                   <LoadingButton
                     isLoading={saving}
                     onClick={() => updateField("bio", bio)}
