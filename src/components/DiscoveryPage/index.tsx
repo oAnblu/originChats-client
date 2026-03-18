@@ -1,5 +1,5 @@
 import { useState, useEffect } from "preact/hooks";
-import { servers } from "../../state";
+import { servers, usersByServer } from "../../state";
 import { switchServer, selectHomeChannel } from "../../lib/actions";
 import { saveServers } from "../../lib/persistence";
 import { Icon } from "../Icon";
@@ -25,6 +25,23 @@ function timeAgo(ms: number): string {
   return `${Math.floor(months / 12)}y ago`;
 }
 
+interface ServerInfoResponse {
+  server?: {
+    name: string;
+    icon: string | null;
+    owner?: {
+      name: string;
+    };
+  };
+  stats?: {
+    total_users: number;
+    connected_users: number;
+    online_users: number;
+    total_channels: number;
+    total_roles: number;
+  };
+}
+
 export function DiscoveryPage() {
   const [serverList, setServerList] = useState<DiscoveryServer[] | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -33,6 +50,29 @@ export function DiscoveryPage() {
   const [activeTab, setActiveTab] = useState<"browse" | "conditions">("browse");
   const [joiningUrl, setJoiningUrl] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [serverInfoMap, setServerInfoMap] = useState<
+    Record<string, ServerInfoResponse>
+  >({});
+  const [sortBy, setSortBy] = useState<"members" | "newest">("newest");
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+
+  const getServerStats = (url: string) => {
+    const usersMap = usersByServer.value[url] || {};
+    const allUsers = Object.values(usersMap);
+    const totalUsers = allUsers.length;
+    const onlineUsers = allUsers.filter(
+      (u) => u.status && u.status !== "offline",
+    ).length;
+    return { totalUsers, onlineUsers };
+  };
+
+  const getServerMemberCount = (url: string): number => {
+    const alreadyJoined = servers.value.some((sv) => sv.url === url);
+    if (alreadyJoined) {
+      return getServerStats(url).totalUsers;
+    }
+    return serverInfoMap[url]?.stats?.total_users ?? 0;
+  };
 
   useEffect(() => {
     fetch("/discovery.json")
@@ -43,6 +83,39 @@ export function DiscoveryPage() {
       .then((data: DiscoveryServer[]) => setServerList(data))
       .catch(() => setLoadError(true));
   }, []);
+
+  useEffect(() => {
+    if (serverList && serverList.length > 0) {
+      const interval = setInterval(() => {
+        setFeaturedIndex((prev) => (prev + 1) % Math.min(5, serverList.length));
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [serverList]);
+
+  useEffect(() => {
+    if (!serverList) return;
+
+    const fetchServerInfo = async () => {
+      const unjoinedServers = serverList.filter(
+        (s) => !servers.value.some((sv) => sv.url === s.url),
+      );
+
+      for (const server of unjoinedServers) {
+        try {
+          const response = await fetch(`https://${server.url}/info`);
+          if (response.ok) {
+            const data: ServerInfoResponse = await response.json();
+            setServerInfoMap((prev) => ({ ...prev, [server.url]: data }));
+          }
+        } catch {
+          // Ignore errors fetching server info
+        }
+      }
+    };
+
+    fetchServerInfo();
+  }, [serverList]);
 
   const handleJoin = async (url: string) => {
     const normalized = url.replace(/^wss?:\/\//, "");
@@ -71,18 +144,32 @@ export function DiscoveryPage() {
     selectHomeChannel();
   };
 
-  const visibleServers = (serverList ?? []).filter((s) => {
-    const tags = s.tags;
-    const matchesTag = activeTag === "all" || tags.includes(activeTag);
-    const q = search.trim().toLowerCase();
-    const matchesSearch =
-      !q ||
-      s.name.toLowerCase().includes(q) ||
-      s.url.toLowerCase().includes(q) ||
-      s.owner.toLowerCase().includes(q) ||
-      (s.description ?? "").toLowerCase().includes(q);
-    return matchesTag && matchesSearch;
-  });
+  const visibleServers = (serverList ?? [])
+    .filter((s) => {
+      const tags = s.tags;
+      const matchesTag = activeTag === "all" || tags.includes(activeTag);
+      const q = search.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        s.url.toLowerCase().includes(q) ||
+        s.owner.toLowerCase().includes(q) ||
+        (s.description ?? "").toLowerCase().includes(q);
+      return matchesTag && matchesSearch;
+    })
+    .sort((a, b) => {
+      if (sortBy === "members") {
+        const aMembers = getServerMemberCount(a.url);
+        const bMembers = getServerMemberCount(b.url);
+        return bMembers - aMembers;
+      }
+      return b.created_at - a.created_at;
+    });
+
+  const topServers = (serverList ?? [])
+    .slice()
+    .sort((a, b) => getServerMemberCount(b.url) - getServerMemberCount(a.url))
+    .slice(0, 5);
 
   const uniqueTags = new Set((serverList ?? []).flatMap((s) => s.tags));
   const availableTags = ["all", ...Array.from(uniqueTags).sort()];
@@ -143,6 +230,68 @@ export function DiscoveryPage() {
       <div className="discovery-page-body">
         {activeTab === "browse" ? (
           <>
+            {serverList && serverList.length > 0 && (
+              <div className="discovery-featured-section">
+                <h2 className="discovery-featured-title">
+                  <Icon name="Star" size={18} />
+                  Featured Servers
+                </h2>
+                <div className="discovery-featured-carousel">
+                  {serverList !== null &&
+                    topServers.map((server, idx) => (
+                      <div
+                        key={server.url}
+                        className={`discovery-featured-card${
+                          idx === featuredIndex ? " active" : ""
+                        }`}
+                      >
+                        <div className="discovery-featured-icon">
+                          {server.icon ? (
+                            <img src={server.icon} alt={server.name} />
+                          ) : (
+                            <span>{server.name[0]?.toUpperCase()}</span>
+                          )}
+                        </div>
+                        <div className="discovery-featured-content">
+                          <h3 className="discovery-featured-name">
+                            {server.name}
+                          </h3>
+                          <p className="discovery-featured-url">{server.url}</p>
+                          <div className="discovery-featured-stats">
+                            <span>
+                              <Icon name="Users" size={12} />
+                              {getServerMemberCount(server.url)} members
+                            </span>
+                          </div>
+                        </div>
+                        <div className="discovery-featured-owner">
+                          <img
+                            src={`https://avatars.rotur.dev/${server.owner}`}
+                            alt={server.owner}
+                          />
+                        </div>
+                        <button
+                          className="discovery-featured-dot"
+                          onClick={() => setFeaturedIndex(idx)}
+                          aria-label={`View ${server.name}`}
+                        />
+                      </div>
+                    ))}
+                  <div className="discovery-featured-indicators">
+                    {topServers.map((_, idx) => (
+                      <button
+                        key={idx}
+                        className={`discovery-featured-indicator${
+                          idx === featuredIndex ? " active" : ""
+                        }`}
+                        onClick={() => setFeaturedIndex(idx)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Tag bar */}
             <div className="discovery-page-tags">
               {availableTags.map((tag) => (
@@ -154,6 +303,24 @@ export function DiscoveryPage() {
                   {tag.charAt(0).toUpperCase() + tag.slice(1)}
                 </button>
               ))}
+            </div>
+
+            {/* Sort controls */}
+            <div className="discovery-page-controls">
+              <span className="discovery-page-sort-label">Sort by:</span>
+              {(["members", "newest"] as const).map((sort) => (
+                <button
+                  key={sort}
+                  className={`discovery-page-sort-btn${sortBy === sort ? " active" : ""}`}
+                  onClick={() => setSortBy(sort)}
+                >
+                  {sort === "members" ? "Members" : "Newest"}
+                </button>
+              ))}
+              <span className="discovery-page-count">
+                {visibleServers.length} server
+                {visibleServers.length !== 1 ? "s" : ""}
+              </span>
             </div>
 
             {/* Results */}
@@ -186,9 +353,12 @@ export function DiscoveryPage() {
                     );
                     const isJoining = joiningUrl === s.url;
                     const hasError = joinError === s.url;
+                    const serverStats = getServerStats(s.url);
+                    const ownerName =
+                      serverInfoMap[s.url]?.server?.owner?.name || s.owner;
                     return (
                       <div key={s.url} className="discovery-page-card">
-                        <div className="discovery-page-card-top">
+                        <div className="discovery-page-card-header">
                           <div className="discovery-page-card-icon">
                             {s.icon ? (
                               <img src={s.icon} alt={s.name} />
@@ -226,9 +396,41 @@ export function DiscoveryPage() {
 
                         <div className="discovery-page-card-footer">
                           <div className="discovery-page-card-info">
-                            <span>
-                              <Icon name="User" size={12} />
-                              {s.owner}
+                            {alreadyJoined && serverStats.totalUsers > 0 && (
+                              <span>
+                                <Icon name="Users" size={12} />
+                                {serverStats.totalUsers} members
+                              </span>
+                            )}
+                            {!alreadyJoined && serverInfoMap[s.url]?.stats && (
+                              <span>
+                                <Icon name="Users" size={12} />
+                                {serverInfoMap[s.url].stats?.total_users ??
+                                  0}{" "}
+                                members
+                              </span>
+                            )}
+                            {alreadyJoined && serverStats.onlineUsers > 0 && (
+                              <span>
+                                <Icon name="Radio" size={12} />
+                                {serverStats.onlineUsers} online
+                              </span>
+                            )}
+                            {!alreadyJoined && serverInfoMap[s.url]?.stats && (
+                              <span>
+                                <Icon name="Radio" size={12} />
+                                {serverInfoMap[s.url].stats?.online_users ??
+                                  0}{" "}
+                                online
+                              </span>
+                            )}
+                            <span className="discovery-page-card-owner-info">
+                              <img
+                                src={`https://avatars.rotur.dev/${ownerName}`}
+                                alt={ownerName}
+                                title={ownerName}
+                              />
+                              {ownerName}
                             </span>
                             <span>
                               <Icon name="Clock" size={12} />
