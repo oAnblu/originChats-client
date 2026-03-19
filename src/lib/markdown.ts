@@ -249,6 +249,8 @@ export function parseMarkdown(
     );
   }
 
+  text = text.replace(/~~(.+?)~~/g, (_, content) => `<s>${content}</s>`);
+
   text = text.replace(
     /\*\*\*(.+?)\*\*\*/g,
     (_, content) => `<strong><em>${content}</em></strong>`,
@@ -302,13 +304,17 @@ export function parseMarkdown(
 
   // Restore markdown links [name](url)
   for (const { placeholder, name, url } of markdownLinks) {
-    embedLinks.push(url);
-    const safeUrl = escapeAttribute(url);
-    const safeName = restoreInlineCode(escapeHtml(name));
-    text = text.replace(
-      placeholder,
-      `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`,
-    );
+    if (url.startsWith("https://") || url.startsWith("http://")) {
+      embedLinks.push(url);
+      const safeUrl = escapeAttribute(url);
+      const safeName = restoreInlineCode(escapeHtml(name));
+      text = text.replace(
+        placeholder,
+        `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeName}</a>`,
+      );
+    } else {
+      text = text.replace(placeholder, `[${name}](${url})`);
+    }
   }
 
   // Restore URLs and process them
