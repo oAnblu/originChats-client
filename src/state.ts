@@ -16,6 +16,8 @@ import type {
 import { settings as dbSettings } from "./lib/db";
 export { unreadState, messageState } from "./lib/state";
 export type { UnreadState, MessageState } from "./lib/state";
+export { statusState } from "./lib/state";
+export type { StatusState } from "./lib/state";
 
 export const token = signal<string | null>(null);
 export const DM_SERVER_URL = "dms.mistium.com";

@@ -46,6 +46,7 @@ import {
   setThreadMessagesForServer,
   myStatus,
 } from "../state";
+import { statusState } from "./state";
 
 import { Channel, VoiceUser, Message, DMServer, Role, Thread } from "../types";
 
@@ -85,6 +86,9 @@ import {
   MessageNew,
   MessagePin,
   MessagesGet,
+  ThreadCreate,
+  ThreadDelete,
+  ThreadGet,
   Typing,
   UserConnect,
   UserDisconnect,
@@ -820,16 +824,8 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
           },
         },
       };
-      const caps = serverCapabilitiesByServer.value[sUrl] ?? [];
-      if (caps.includes("status_set") && myStatus.value.status) {
-        wsSend(
-          {
-            cmd: "status_set",
-            status: myStatus.value.status,
-            text: myStatus.value.text,
-          },
-          sUrl,
-        );
+      if (msg.user.status) {
+        statusState.updateFromReady(sUrl, msg.user.username, msg.user.status);
       }
       renderMembersSignal.value++;
       break;
@@ -911,7 +907,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       break;
     }
     case "thread_create": {
-      const threadCreate = msg as any;
+      const threadCreate = msg as ThreadCreate;
       if (threadCreate.thread && threadCreate.channel) {
         addThreadToChannel(sUrl, threadCreate.channel, threadCreate.thread);
         renderChannelsSignal.value++;
@@ -919,7 +915,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       break;
     }
     case "thread_delete": {
-      const threadDelete = msg as any;
+      const threadDelete = msg as ThreadDelete;
       if (threadDelete.thread_id && threadDelete.channel) {
         removeThreadFromChannel(
           sUrl,
@@ -934,7 +930,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
       break;
     }
     case "thread_get": {
-      const threadGet = msg as any;
+      const threadGet = msg as ThreadGet;
       if (threadGet.thread) {
         currentThread.value = threadGet.thread;
       }
@@ -1073,6 +1069,7 @@ async function handleMessage(msg: any, sUrl: string): Promise<void> {
           },
         };
       }
+      statusState.updateFromStatusGet(sUrl, msg.username, msg.status);
       renderMembersSignal.value++;
       break;
     }
