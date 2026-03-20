@@ -53,7 +53,6 @@ import { voiceState } from "../../voice";
 import { wsSend, fetchMissingReplyMessage } from "../../lib/websocket";
 import {
   highlightCodeInContainer,
-  setShortcodeMap,
   replaceShortcodes,
   convertChannelMentionsToLinks,
 } from "../../lib/markdown";
@@ -63,7 +62,7 @@ import {
   joinThread,
   selectThread,
 } from "../../lib/actions";
-import { getShortcodeMap, loadShortcodes } from "../../lib/shortcodes";
+import { loadShortcodes } from "../../lib/shortcodes";
 import { Icon } from "../Icon";
 import { MembersList } from "../MembersList";
 import { UserContextMenu, useUserContextMenu } from "../UserContextMenu";
@@ -1227,9 +1226,7 @@ export function MessageArea() {
   }, []);
 
   useEffect(() => {
-    loadShortcodes().then(() => {
-      setShortcodeMap(getShortcodeMap());
-    });
+    loadShortcodes();
   }, []);
 
   // Reset scroll lock and snap to bottom on channel switch
